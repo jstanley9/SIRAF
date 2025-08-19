@@ -36,7 +36,11 @@ This modules will contain:
 
 #### Creation module
 
-#### File structure module
+#### File module
+
+This is the only code that will work with the file
+
+See `FileLayout.md` for information on the base design of the file 
 
 #### Indexes module
 
@@ -44,4 +48,4 @@ This modules will contain:
 
 ### Third level module
 
-## I/O module
+#### I/O module
