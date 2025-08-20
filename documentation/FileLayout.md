@@ -18,9 +18,9 @@ The Config and Blocks are maintained by the `File module`
 2. _Blocks_
     - May be located anywhere 
     - Consiste of 
-        ~ _Data blocks_
-        ~ _Available blocks_
-        ~ Meta blocks_
+        - _Data blocks_
+        - _Available blocks_
+        - Meta blocks_
 
 ### _Config_
 
@@ -52,18 +52,18 @@ Basic information that the `File module` uses to verify, and maintain the file a
     - Maintained by the interface code
     - Used as a fence at the beginning and ending of the block
     - ** Contents **
-        ~ Header or End block type
-            # 1 bit
-            # 1 = Header; 0 = End
-        ~ Type of block
-            # 7 bits
-            # Currently defined as `Data`, `Meta`, and `Available`
-            # Special types for short _Blocks_ are `Avail_1_Byte`, `Avail_2_Bytes`, ... `Avail_15_bytes`
-                ^ These are _Blocks_ that are too small to hold any data
-                ^ They will have no _End Descriptor_
-                ^ They will be merged into an _`Available` block_ when the preceeding _Data Block_ is freed
+        - Header or End block type
+            - 1 bit
+            - 1 = Header; 0 = End
+        - Type of block
+            - 7 bits
+            - Currently defined as `Data`, `Meta`, and `Available`
+            - Special types for short _Blocks_ are `Avail_1_Byte`, `Avail_2_Bytes`, ... `Avail_15_bytes`
+                - These are _Blocks_ that are too small to hold any data
+                - They will have no _End Descriptor_
+                - They will be merged into an _`Available` block_ when the preceeding _Data Block_ is freed
     - Size of the the data area in bytes
-        ~ This is stored in an `Endian` free format
+        - This is stored in an `Endian` free format
     - Checksum
 2. User _Data_
 3. _Block Descriptor_
