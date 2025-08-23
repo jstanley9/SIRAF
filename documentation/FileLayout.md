@@ -1,8 +1,12 @@
 # RAVRF file layout
 
+Random Access, Variable Record File
+
 ## Description
 
 This is a random access file. It is designed to handle variable size data records with the ability to update existing records where the size of the record changes with the update. 
+
+Think of it as a paged heap on long term storage.
 
 This package does not specify or know how to locate the individual records. When adding or updating records an associated address is returned. It can be used to retrieve that record at a later time. Note, that an updated record may have a different different address when the update is complete; when that happens the previous block will have been deleted.
 
@@ -17,7 +21,7 @@ The Config and Blocks are maintained by the `File module`
     - Always starts at address zero
 2. _Blocks_
     - May be located anywhere 
-    - Consiste of 
+    - Consist of 
         - _Data blocks_
         - _Available blocks_
         - Meta blocks_
@@ -34,13 +38,13 @@ Basic information that the `File module` uses to verify, and maintain the file a
     - Two digit version number.
     - Used for backward compatabiity
 3. Absolute Address of the _Meta Block_
-    - 32 bit unsigned integer giving the absolure address of the _Meta Block_
-    - This is stored as an array of unsigned 8 bit integers, making it independed of any and all system _`endian`_ configuration
+    - 32 bit unsigned integer giving the address of the _Meta Block_
+    - May be zero; none defined
 4. Absolute address of the first _Available block_    
     - 32 bit unsigned integer giving the absolure address of the _Meta Block_
-    - This is stored as an array of unsigned 8 bit integers, making it independed of any and all system _`endian`_ configuration
+    - May be zero
 5. Checksum
-    - Computed wheneve there is a change
+    - Computed whenever there is a change
     - Used as verification that everything is OK
 
 ### _Blocks_
