@@ -50,28 +50,27 @@ Basic information that the `File module` uses to verify, and maintain the file a
 ### _Blocks_
 
 #### Basic _Block_ layout
-1. _Block Description_
+1. _Block Descriptor_
     - Private
     - 64 bits
     - Maintained by the interface code
     - Used as a fence at the beginning and ending of the block
     - ** Contents **
-        - Header or End block type
-            - 1 bit
-            - 1 = Header; 0 = End
         - Type of block
-            - 7 bits
+            - byte
             - Currently defined as `Data`, `Meta`, and `Available`
             - Special types for short _Blocks_ are `Avail_1_Byte`, `Avail_2_Bytes`, ... `Avail_15_bytes`
                 - These are _Blocks_ that are too small to hold any data
                 - They will have no _End Descriptor_
                 - They will be merged into an _`Available` block_ when the preceeding _Data Block_ is freed
-    - Size of the the data area in bytes
-        - This is stored in an `Endian` free format
-    - Checksum
+        - Size of the the data area in bytes
+        - Checksum
 2. User _Data_
 3. _Block Descriptor_
     - Ending fence
+    - ** Contents **
+        - Size of the data area in bytes
+        - Type of block
 
 #### _Meta Block_
 
