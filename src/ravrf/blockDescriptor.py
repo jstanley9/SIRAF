@@ -52,7 +52,7 @@ class HeadBlock:
                 return False
             case BlockType.AVAIL_MIN_FULL_FENCE:
                 self.__block_type = BlockType.AVAILABLE
-                self.__data_length = 1
+                self.__data_length = BlockType.AVAIL_MIN_FULL_FENCE.value
                 return True
             case BlockType.AVAILABLE: 
                 if self.__data_length < BlockType.AVAIL_MIN_FULL_FENCE.value:
@@ -97,7 +97,7 @@ class HeadBlock:
             case BlockType.AVAIL_MIN_FULL_FENCE:
                 raise ValueError("AVAIL_MIN_FULL_FENCE is not a valid block type for decoding")
             case BlockType.AVAILABLE | BlockType.META_BLOCK | BlockType.DATA_BLOCK:
-                block_type, data_length, checksum = struct.unpack(cls.__STRUCT_MASK, data)
+                _, data_length, checksum = struct.unpack(cls.__STRUCT_MASK, data)
                 return cls(block_type, data_length, checksum)
             case _:
                 raise ValueError(f"Invalid block type: {block_type}:{block_type.value}")
