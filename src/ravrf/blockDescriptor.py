@@ -119,7 +119,8 @@ class EndBlock:
 
     @classmethod
     def decode(cls, data: bytearray):
-        data_len, block_type = struct.unpack(cls.__STRUCT_MASK, data)
+        block_type = BlockType(data[len(data) - 1])
+        data_len, _ = struct.unpack(cls.__STRUCT_MASK, data)
         return cls(data_len, block_type)
     
     @classmethod

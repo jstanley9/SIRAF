@@ -147,7 +147,6 @@ def test_meta_1byte_decode():
 
 def test_meta_496byte():
     head = blockDescriptor.HeadBlock(blockDescriptor.BlockType.META_BLOCK, 496, 306)
-    print(f"HeadBlock: {head}")
     assert head.encode() == bytearray(b'\x41\x00\x00\x01\xf0\x01\x32')
 
 def test_meta_496byte_decode():
@@ -158,7 +157,6 @@ def test_meta_496byte_decode():
 
 def test_data_1byte():
     head = blockDescriptor.HeadBlock(blockDescriptor.BlockType.DATA_BLOCK, 1, 67)
-    print(f"HeadBlock: {head}")
     assert head.encode() == bytearray(b'\x42\x00\x00\x00\x01\x00\x43')
 
 def test_data_1byte_decode():
@@ -169,7 +167,6 @@ def test_data_1byte_decode():
 
 def test_data_496byte():
     head = blockDescriptor.HeadBlock(blockDescriptor.BlockType.DATA_BLOCK, 496, 307)
-    print(f"HeadBlock: {head}")
     assert head.encode() == bytearray(b'\x42\x00\x00\x01\xf0\x01\x33')
 
 def test_data_496byte_decode():
@@ -178,6 +175,55 @@ def test_data_496byte_decode():
     newHead = blockDescriptor.HeadBlock.decode(data)
     assert newHead.encode() == data
 
+def test_avail_13byte_end():
+    tail = blockDescriptor.EndBlock(13, blockDescriptor.BlockType.AVAILABLE)
+    assert tail.encode() == bytearray(b'\x00\x00\x00\x0d\x40')
+
+def test_avail_13byte_end_decode():
+    tail = blockDescriptor.EndBlock(13, blockDescriptor.BlockType.AVAILABLE)
+    data = tail.encode()
+    newTail = blockDescriptor.EndBlock.decode(data)
+    assert newTail.encode() == data
+
+def test_meta_1byte_end():
+    tail = blockDescriptor.EndBlock(1, blockDescriptor.BlockType.META_BLOCK)
+    assert tail.encode() == bytearray(b'\x00\x00\x00\x01\x41')
+
+def test_meta_1byte_decode_end():
+    tail = blockDescriptor.EndBlock(1, blockDescriptor.BlockType.META_BLOCK)
+    data = tail.encode()
+    newTail = blockDescriptor.EndBlock.decode(data)
+    assert newTail.encode() == data
+
+def test_meta_496byte_end():
+    tail = blockDescriptor.EndBlock(496, blockDescriptor.BlockType.META_BLOCK)
+    assert tail.encode() == bytearray(b'\x00\x00\x01\xf0\x41')
+
+def test_meta_496byte_decode_end():
+    tail = blockDescriptor.EndBlock(496, blockDescriptor.BlockType.META_BLOCK)
+    data = tail.encode()
+    newTail = blockDescriptor.EndBlock.decode(data)
+    assert newTail.encode() == data
+
+def test_data_1byte_end():
+    tail = blockDescriptor.EndBlock(1, blockDescriptor.BlockType.DATA_BLOCK)
+    assert tail.encode() == bytearray(b'\x00\x00\x00\x01\x42')
+
+def test_data_1byte_decode_end():
+    tail = blockDescriptor.EndBlock(1, blockDescriptor.BlockType.DATA_BLOCK)
+    data = tail.encode()
+    newTail = blockDescriptor.EndBlock.decode(data)
+    assert newTail.encode() == data
+
+def test_data_496byte_end():
+    tail = blockDescriptor.EndBlock(496, blockDescriptor.BlockType.DATA_BLOCK)
+    assert tail.encode() == bytearray(b'\x00\x00\x01\xf0\x42')
+
+def test_data_496byte_decode_end():
+    tail = blockDescriptor.EndBlock(496, blockDescriptor.BlockType.DATA_BLOCK)
+    data = tail.encode()
+    newTail = blockDescriptor.EndBlock.decode(data)
+    assert newTail.encode() == data
 
 def main():
     print("Running tests for blockDescriptor")  
