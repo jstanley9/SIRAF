@@ -7,7 +7,7 @@ sys.path.append(srcPath)
 import config
 
 def test_getStorageSize():
-    assert config.RavrfConfig.getStorageSize() == 22
+    assert config.RavrfConfig.getStorageSize() == 40
 
 def test_config_create():
     cfg = config.RavrfConfig()
@@ -19,19 +19,19 @@ def test_config_encode_new():
     cfg = config.RavrfConfig()
     data = cfg.encode()
     assert isinstance(data, bytearray)
-    assert len(data) == 22
-    assert data[0:11] == b"/~ ravrf ~/"
-    assert data[11] == 1
-    assert struct.unpack(">I", data[12:16])[0] == 0
-    assert struct.unpack(">I", data[16:20])[0] == 0
+    assert len(data) == 40
+    assert data[0:9] == b"/~ravrf~/"
+    assert data[9] == 1
+    assert struct.unpack(">I", data[10:14])[0] == 0
+    assert struct.unpack(">I", data[14:18])[0] == 0
 
 def test_config_encode_custom():
     cfg = config.RavrfConfig(version=1, meta_address=123456, first_available_address=654321, checksum=793)
     data = cfg.encode()
     print(f'encoded data: {data}')
     assert isinstance(data, bytearray)
-    assert len(data) == 22
-    assert data[0:11] == b"/~ ravrf ~/"
-    assert data[11] == 1
-    assert struct.unpack(">I", data[12:16])[0] == 123456
-    assert struct.unpack(">I", data[16:20])[0] == 654321    
+    assert len(data) == 40
+    assert data[0:9] == b"/~ravrf~/"
+    assert data[9] == 1
+    assert struct.unpack(">I", data[10:14])[0] == 123456
+    assert struct.unpack(">I", data[14:18])[0] == 654321    

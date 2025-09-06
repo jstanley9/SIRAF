@@ -2,11 +2,14 @@ import struct
 from checksum import calc_16bit_checksum
 
 class RavrfConfig:
-    __MAGIC = b"/~ ravrf ~/"
+    __MAGIC = b"/~ravrf~/"
+    # 20 byte expansion area for future use
+    __EXPANSION_AREA = b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
     __CURRENT_VERSION = 1
-    __STRUCT_MASK = ">11sBIIH"  # 11 bytes string, 1 byte, 4 bytes, 4 bytes, 2 bytes
+    __STRUCT_MASK = ">9sBIIH20s"  # 9 bytes string, 1 byte, 4 bytes, 4 bytes, 2 bytes 20 bytes
 
-    def __init__(self, version: int = __CURRENT_VERSION, meta_address: int = 0, first_available_address: int = 0, checksum: int = 0):
+    def __init__(self, version: int = __CURRENT_VERSION, meta_address: int = 0, first_available_address: int = 0,
+                 checksum: int = 0):
         self.__version = version
         self.meta_address = meta_address
         self.first_available_address = first_available_address
@@ -17,9 +20,10 @@ class RavrfConfig:
             raise ValueError(f"Configuration checksum ({checksum}) does not match calculated checksum ({calc_checksum})")
 
     def encode(self) -> bytearray:
-        # Format: 11s B I I H (11 bytes string, 1 byte, 4 bytes, 4 bytes, 2 bytes)
+        # Format: 9s B I I H (9 bytes string, 1 byte, 4 bytes, 4 bytes, 2 bytes)
         return bytearray(struct.pack(self.__STRUCT_MASK, 
-                                     self.__MAGIC, self.__version, self.meta_address, self.first_available_address, self.__getChecksum()
+                                     self.__MAGIC, self.__version, self.meta_address, self.first_available_address, 
+                                     self.__getChecksum(), self.__EXPANSION_AREA
         ))
     
     def __getChecksum(self):
@@ -29,7 +33,7 @@ class RavrfConfig:
     def decode(cls, data: bytearray):
         if len(data) != 22:
             raise ValueError("Bytearray must be exactly 22 bytes")
-        magic, version, meta_address, first_available_address, checksum = struct.unpack(cls.__STRUCT_MASK, data)
+        magic, version, meta_address, first_available_address, checksum, _ = struct.unpack(cls.__STRUCT_MASK, data)
         if magic != cls.__MAGIC:
             raise ValueError("Invalid magic header")
         return cls(version, meta_address, first_available_address, checksum)
@@ -37,4 +41,3 @@ class RavrfConfig:
     @classmethod
     def getStorageSize(cls):
         return struct.calcsize(cls.__STRUCT_MASK)
-    
