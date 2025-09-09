@@ -34,4 +34,4 @@ def test_config_encode_custom():
     assert data[0:9] == b"/~ravrf~/"
     assert data[9] == 1
     assert struct.unpack(">I", data[10:14])[0] == 123456
-    assert struct.unpack(">I", data[14:18])[0] == 654321    
+    assert struct.unpack(">I", data[14:18])[0] == 654321
