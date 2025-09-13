@@ -30,12 +30,10 @@ def test_avail_1byte_decode():
 
 def test_avail_2byte():
     head = blockDescriptor.HeadBlock(blockDescriptor.BlockType.AVAIL_02_BYTE, 2, 0)
-    print(f"HeadBlock: {head}")
     assert head.encode() == bytearray(b'\x02\x02')
 
 def test_avail_2byte_available():
     head = blockDescriptor.HeadBlock(blockDescriptor.BlockType.AVAILABLE, 2, 0)
-    print(f"HeadBlock: {head}")
     assert head.encode() == bytearray(b'\x02\x02')    
 
 def test_avail_2byte_decode():
@@ -94,12 +92,10 @@ def test_avail_7byte_decode():
 
 def test_avail_8byte():
     head = blockDescriptor.HeadBlock(blockDescriptor.BlockType.AVAIL_08_BYTE, 8, 0)
-    print(f"HeadBlock: {head}")
     assert head.encode() == bytearray(b'\x08\x08\x08\x08\x08\x08\x08\x08')
 
 def test_avail_8byte_available():
     head = blockDescriptor.HeadBlock(blockDescriptor.BlockType.AVAILABLE, 8, 0)
-    print(f"HeadBlock: {head}")
     assert head.encode() == bytearray(b'\x08\x08\x08\x08\x08\x08\x08\x08')
 
 def test_avail_8byte_decode():

@@ -17,7 +17,12 @@ class RavrfConfig:
         calc_checksum = self.__getChecksum()
         all_zero = (checksum == 0 and meta_address == 0 and first_available_address == 0)
         if not (all_zero or checksum == calc_checksum):
-            raise ValueError(f"Configuration checksum ({checksum}) does not match calculated checksum ({calc_checksum})")
+            attributes = f"({all_zero}, {checksum}, {meta_address}, {first_available_address})"
+            raise ValueError(f"Configuration checksum {attributes} does not match calculated checksum ({calc_checksum})")
+        
+    def __str__(self):
+        return f"RavrfConfig(version={self.__version}, meta_address={self.meta_address}, " + \
+               f"first_available_address={self.first_available_address})"
 
     def encode(self) -> bytearray:
         # Format: 9s B I I H (9 bytes string, 1 byte, 4 bytes, 4 bytes, 2 bytes)
@@ -30,8 +35,8 @@ class RavrfConfig:
         return calc_16bit_checksum([self.__version, self.meta_address, self.first_available_address]) 
 
     @classmethod
-    def decode(cls, data: bytearray):
-        if len(data) != 22:
+    def decode(cls, data: bytearray) -> "RavrfConfig":
+        if len(data) != cls.getStorageSize():
             raise ValueError("Bytearray must be exactly 22 bytes")
         magic, version, meta_address, first_available_address, checksum, _ = struct.unpack(cls.__STRUCT_MASK, data)
         if magic != cls.__MAGIC:
