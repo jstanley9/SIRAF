@@ -3,87 +3,84 @@ from typing import Tuple
 from checksum import calc_16bit_checksum
 from enum import IntEnum
 
-class BlockType(IntEnum):          # limited to 1 byte (0 - 255)
-    AVAIL_01_BYTE = 1           # 1 byte is available. This will remain unavailable until the block just above is freed
-    AVAIL_02_BYTE = 2           # These AVAIL_nn_BYTE types are used to indicate small blocks of available space
-                                    # that cannot have full HeadBloc, EndBlock, and at lease 1 byte of data.
-                                    # When an available block has this type, the entire available space is filled with this nn value
-                                    # These blocks are not entered into the available list. They will be recovered when the block above or 
-                                    # below them is freed, making it available.
-    AVAIL_03_BYTE = 3
-    AVAIL_04_BYTE = 4
-    AVAIL_05_BYTE = 5
-    AVAIL_06_BYTE = 6
-    AVAIL_07_BYTE = 7
-    AVAIL_08_BYTE = 8
-    AVAIL_09_BYTE = 9
-    AVAIL_10_BYTE = 10
-    AVAIL_11_BYTE = 11
-    AVAIL_12_BYTE = 12
-
-    AVAIL_MIN_FULL_FENCE = 13  ## Minimum size for full fence. That includes HeadBlock, EndBlock, and at least 1 byte of data
-                               ## NOTE: This may change with Version number changes. See Config.py for versioning
-    AVAILABLE = 64             ## 0X40
-    META_BLOCK = 65            ## 0X41
-    DATA_BLOCK = 66            ## 0X42
+class BlockType(IntEnum):      ## limited to 1 byte (0 - 128) value is an ascii letter
+    AVAILABLE = 65             ## 0X41 ascii A
+    DATA_BLOCK = 68            ## 0X44 ascii D
+    META_BLOCK = 77            ## 0X4D ascii M
 
 class HeadBlock:
-    # A normal block layout is 1 byte type, 4 bytes data length, 2 bytes checksum
-    # An Available block may not contain AVAIL_MIN_FULL_FENCE BYTES, so a shorter block definition is needed.
-    # When the available BlockType value is less than AVAIL_MIN_FULL_FENCE, the value is the size of the available block 
-    __STRUCT_MASK = ">BIH"
+    # A normal block layout is:
+    #   1 byte - block_type: See Block_Type enumeration above
+    #   4 bytes - record_size: Total number of bytes required by the data, heading, ending, and any padding
+    #   4 bytes - data_length: actual length of the data
+    #                          alias: next_avail for AVAILABLE
+    #   4 bytes - padding: Number of extra bytes at the end. 
+    #                      Allows for some growth and eliminates AVAILABLE blocks that are smaller than MinBlockSize
+    #                      alias: prev_avail for AVAILABLE
+    #   2 bytes - checksum:
+    #
+    # When reading blocks we always know what type is being read. Checks are made to ensure that the expected type
+    # is at the location being read
+    __STRUCT_MASK = ">BIIIH"
 
-    def __init__(self, block_type: BlockType, data_length: int, checksum: int = 0):
+    def __init__(self, block_type: BlockType, data_length: int, record_size: int, padding: int, checksum: int):
         self.block_type = block_type
-        self.data_length = data_length
-        calc_checksum = self.__getActualDataLength(checksum)  
-        
-        if calc_checksum:
+        self.record_size = record_size
+        if self.isAvailable():
+            self.next_available = data_length
+            self.prev_available = padding
+        else:
+            self.data_length = data_length
+            self.padding = padding
+
+        if checksum != 0:
             calc_checksum = self.__getChecksum()
             if checksum != calc_checksum:
                raise ValueError(f"HeadBlock checksum ({checksum}) does not match calculated checksum ({calc_checksum})")
+
+    @property
+    def next_available(self):
+        return self.data_length
+    
+    @property
+    def prev_available(self):
+        return self.padding
+    
+    @next_available.setter
+    def next_available(self, next_available):
+        self.data_length = next_available
+
+    @prev_available.setter
+    def prev_available(self, prev_available):
+        self.padding = prev_available
+
+    def isAvailable(self):
+        return self.block_type == BlockType.AVAILABLE
+
+    def __calcRecordSize(self, data_length: int, record_size: int = 0):
+        minRequiredLength = CalcMinBlockSize() + data_length
+        if record_size < minRequiredLength:
+            record_size = minRequiredLength
         
-    def __getActualDataLength(self, checksum: int) -> bool:
-        match self.block_type:
-            case BlockType.AVAIL_01_BYTE | BlockType.AVAIL_02_BYTE | BlockType.AVAIL_03_BYTE | \
-                 BlockType.AVAIL_04_BYTE | BlockType.AVAIL_05_BYTE | BlockType.AVAIL_06_BYTE | \
-                 BlockType.AVAIL_07_BYTE | BlockType.AVAIL_08_BYTE | BlockType.AVAIL_09_BYTE | \
-                 BlockType.AVAIL_10_BYTE | BlockType.AVAIL_11_BYTE | BlockType.AVAIL_12_BYTE:
-                self.data_length = self.block_type.value
-                return False
-            case BlockType.AVAIL_MIN_FULL_FENCE:
-                self.block_type = BlockType.AVAILABLE
-                self.data_length = BlockType.AVAIL_MIN_FULL_FENCE.value
-                return (checksum != 0)
-            case BlockType.AVAILABLE: 
-                if self.data_length < BlockType.AVAIL_MIN_FULL_FENCE.value:
-                    self.block_type = BlockType(self.data_length)
-                    return self.__getActualDataLength(checksum)
-                
-                return (checksum != 0)
-            case BlockType.META_BLOCK | BlockType.DATA_BLOCK:
-                return (checksum != 0)
-            case _:
-                raise ValueError(f"Invalid block type: {self.block_type}")
-            
+        return record_size, record_size - minRequiredLength
+    
 
     def __getChecksum(self):
-        return calc_16bit_checksum([self.block_type.value, self.data_length])
+        return calc_16bit_checksum([self.block_type.value, self.data_length, self.record_size, self.padding])
 
 
     def encode(self) -> bytearray:
         match self.block_type:
-            case BlockType.AVAIL_01_BYTE | BlockType.AVAIL_02_BYTE | BlockType.AVAIL_03_BYTE | \
-                 BlockType.AVAIL_04_BYTE | BlockType.AVAIL_05_BYTE | BlockType.AVAIL_06_BYTE | \
-                 BlockType.AVAIL_07_BYTE | BlockType.AVAIL_08_BYTE | BlockType.AVAIL_09_BYTE | \
-                 BlockType.AVAIL_10_BYTE | BlockType.AVAIL_11_BYTE | BlockType.AVAIL_12_BYTE:
-                return bytearray([self.block_type.value] * self.block_type)
-            case BlockType.AVAIL_MIN_FULL_FENCE:
-                raise ValueError("AVAIL_MIN_FULL_FENCE is not a valid block type for encoding")
-            case BlockType.AVAILABLE | BlockType.META_BLOCK | BlockType.DATA_BLOCK:                 
-                # Format: B I H (1 byte, 4 bytes, 2 bytes)
+            case BlockType.AVAILABLE:
+                # Format: B I I I H (1 byte, 4 bytes, 4 bytes, 4 bytes, 2 bytes)
                 return bytearray(struct.pack(self.__STRUCT_MASK,    
-                                            self.block_type, self.data_length, self.__getChecksum()))
+                                            self.block_type, self.record_size, self.next_avail, self.prev_avail, 
+                                            self.__getChecksum()))
+            case BlockType.META_BLOCK | BlockType.DATA_BLOCK:                 
+                # Format: B I I I H (1 byte, 4 bytes, 4 bytes, 4 bytes, 2 bytes)
+                return bytearray(struct.pack(self.__STRUCT_MASK,    
+                                            self.block_type, self.record_size, self.data_length, self.padding, 
+                                            self.__getChecksum()))
             case _:
                 raise ValueError(f"Invalid block type: {self.block_type}:{self.block_type.value}")
 
@@ -91,17 +88,12 @@ class HeadBlock:
     def decode(cls, data: bytearray):
         block_type = BlockType(data[0])
         match block_type:
-            case BlockType.AVAIL_01_BYTE | BlockType.AVAIL_02_BYTE | BlockType.AVAIL_03_BYTE | \
-                 BlockType.AVAIL_04_BYTE | BlockType.AVAIL_05_BYTE | BlockType.AVAIL_06_BYTE | \
-                 BlockType.AVAIL_07_BYTE | BlockType.AVAIL_08_BYTE | BlockType.AVAIL_09_BYTE | \
-                 BlockType.AVAIL_10_BYTE | BlockType.AVAIL_11_BYTE | BlockType.AVAIL_12_BYTE:
-                data_len = block_type.value
-                return cls(block_type, data_len, 0)
-            case BlockType.AVAIL_MIN_FULL_FENCE:
-                raise ValueError("AVAIL_MIN_FULL_FENCE is not a valid block type for decoding")
-            case BlockType.AVAILABLE | BlockType.META_BLOCK | BlockType.DATA_BLOCK:
-                _, data_length, checksum = struct.unpack(cls.__STRUCT_MASK, data)
-                return cls(block_type, data_length, checksum)
+            case BlockType.AVAILABLE:
+                _, record_size, next_available, prev_available, checksum = struct.unpack(cls.__STRUCT_MASK, data)
+                return cls(block_type, next_available, record_size, prev_available, checksum)
+            case BlockType.META_BLOCK | BlockType.DATA_BLOCK:
+                _, record_size, data_length, padding, checksum = struct.unpack(cls.__STRUCT_MASK, data)
+                return cls(block_type, data_length, record_size, padding, checksum)
             case _:
                 raise ValueError(f"Invalid block type: {block_type}:{block_type.value}")
 
@@ -113,19 +105,23 @@ class EndBlock:
     # An EndBlock is always present at the end of a block. It contains only a checksum of the HeadBlock
     __STRUCT_MASK = ">IB"
 
-    def __init__(self, data_length: int, block_type: BlockType):
-        self.data_length = data_length
+    def __init__(self, record_size: int, block_type: BlockType):
+        self.record_size = record_size
         self.block_type = block_type
 
     def encode(self) -> bytearray:
-        return bytearray(struct.pack(self.__STRUCT_MASK, self.data_length, self.block_type.value))
+        return bytearray(struct.pack(self.__STRUCT_MASK, self.record_size, self.block_type.value))
 
     @classmethod
     def decode(cls, data: bytearray):
         block_type = BlockType(data[len(data) - 1])
-        data_len, _ = struct.unpack(cls.__STRUCT_MASK, data)
-        return cls(data_len, block_type)
+        record_size, _ = struct.unpack(cls.__STRUCT_MASK, data)
+        return cls(record_size, block_type)
     
     @classmethod
     def getStorageSize(cls):
         return struct.calcsize(cls.__STRUCT_MASK)    
+    
+
+def CalcMinBlockSize() -> int:
+    return HeadBlock.getStorageSize() + EndBlock.getStorageSize()    
