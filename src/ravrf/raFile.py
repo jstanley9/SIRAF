@@ -1,7 +1,6 @@
 import io
 import os
 import pathlib
-import struct
 import sys
 
 from config import RavrfConfig
