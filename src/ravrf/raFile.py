@@ -126,7 +126,7 @@ class raFile(io.BytesIO):
                 bestfitHead = availHead
 
         if bestFitLocation == 0:
-            return self._size, HeadBlock.initAvailable(requiredSize, 0, 0, 0)
+            return self.__size, HeadBlock.initAvailable(requiredSize, 0, 0, 0)
         else:
             return bestFitLocation, bestfitHead
 
@@ -160,16 +160,19 @@ class raFile(io.BytesIO):
         dataAreaSize = availableHeading.record_size
         totalSize = requiredSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
 
-        if dataAreaSize > totalSize:
+        if dataAreaSize > requiredSize:
             # Split the available block
             remainingSize = dataAreaSize - requiredSize
             newAvailableHead = HeadBlock.initAvailable(remainingSize, prevAvailable, nextAvailable, 0)
             newAvailableLocation = location + requiredSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
             self.__write_data(newAvailableLocation, newAvailableHead.encode())
+            self.__write_data(newAvailableLocation + HeadBlock.getStorageSize() + remainingSize, 
+                              EndBlock(remainingSize, BlockType.AVAILABLE).encode())
             self.__adjustAvaliableLinks(prevAvailable, nextAvailable, newAvailableLocation)
             return requiredSize
         
-        self.__adjustAvaliableLinks
+        self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
+        return requiredSize
 
     def __write_data(self, location: int, record: bytearray) -> None:
         if self.__file is None:
@@ -208,9 +211,9 @@ def main():
     print(f"Test file: {test_file}")
     if os.path.exists(test_file):
         os.remove(test_file)
-    rave = raFile.Create(pathlib.Path(test_file))
+    rave = raFile.Create(test_file)
     try:
-        add_the_first_record()
+        add_the_first_record(rave)
         print(f"ra file: {rave}")
     finally:
         rave.Close()
