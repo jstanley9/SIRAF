@@ -51,7 +51,7 @@ class raFile(io.BytesIO):
         requiredSize = self.__calcRequiredLength(data, padding)
         location, availableHeading = self.__findAvailableSpace(requiredSize)
         recordSize = self.__updateAvailableList(location, availableHeading, requiredSize)
-        record = self.__buildRecord(BlockType.DATA_BLOCK, data, requiredSize, recordSize)
+        record = self.__buildRecord(BlockType.DATA_BLOCK, data, requiredSize)
         self.__write_data(location, record)
 
         return location
@@ -77,6 +77,9 @@ class raFile(io.BytesIO):
         config = self.__file.read(RavrfConfig.getStorageSize())
         self.__config = RavrfConfig.decode(config)
 
+    def ReadData(self, recordId: int) -> bytearray:
+        return self.__readData(recordId)
+    
     def __adjustAvaliableLinks(self, prevAvailable: int, nextAvailable: int, availableLocation: int):
         if nextAvailable > 0:
             nextHead = self.__readHead(nextAvailable, expectedType = BlockType.AVAILABLE)
@@ -87,12 +90,8 @@ class raFile(io.BytesIO):
             prevHead = self.__readHead(prevAvailable, expectedType = BlockType.AVAILABLE)
             prevHead.next_available = availableLocation if availableLocation > 0 else nextAvailable
             self.__write_data(prevAvailable, prevHead.encode())
-        else:
-            self.__config.first_available_address = availableLocation
-            self.__write_data(0, self.__config.encode())
 
-    def __buildRecord(self, blockType: BlockType, data: bytearray, requiredSize: int, 
-                      recordSize: int) -> bytearray:
+    def __buildRecord(self, blockType: BlockType, data: bytearray, requiredSize: int) -> bytearray:
         dataLength = len(data)
         padding = requiredSize - dataLength
         
@@ -100,6 +99,15 @@ class raFile(io.BytesIO):
         endBlock = EndBlock(requiredSize, blockType)
 
         return bytearray(headBlock.encode() + data + bytearray(b"\x00" * padding) + endBlock.encode())
+
+    def __calc_end_block_location(self, recordId: int, dataSize: int) -> int:
+        return recordId + HeadBlock.getStorageSize() + dataSize
+      
+    def __calc_next_record_id(self, recordId: int, dataSize: int) -> int:
+        return recordId + self.__calc_record_size(dataSize)
+    
+    def __calc_record_size(self, dataSize: int) -> int:
+        return dataSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
 
     def __calcRequiredLength(self, data: bytearray, padding: int) -> int:
         return len(data) + padding
@@ -139,9 +147,16 @@ class raFile(io.BytesIO):
             raise ValueError("Read length must be positive")
         
         self.__file.seek(recordId, io.SEEK_SET)
-        head = bytearray(length)
-        self.__file.readinto(head)
-        return head
+        record = bytearray(length)
+        self.__file.readinto(record)
+        return record
+    
+    def __readData(self, recordId: int) -> bytearray:
+        headBlock = self.__readHead(recordId, expectedType = BlockType.DATA_BLOCK)
+        dataSize = headBlock.data_size
+        dataStart = recordId + HeadBlock.getStorageSize()
+        data = self.__read(dataStart, dataSize)
+        return data
 
     def __readHead(self, recordId: int, expectedType: BlockType) -> HeadBlock:
         headSize = HeadBlock.getStorageSize()
@@ -158,20 +173,24 @@ class raFile(io.BytesIO):
         prevAvailable = availableHeading.prev_available
         nextAvailable = availableHeading.next_available
         dataAreaSize = availableHeading.record_size
-        totalSize = requiredSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
-
         if dataAreaSize > requiredSize:
-            # Split the available block
-            remainingSize = dataAreaSize - requiredSize
-            newAvailableHead = HeadBlock.initAvailable(remainingSize, prevAvailable, nextAvailable, 0)
-            newAvailableLocation = location + requiredSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
-            self.__write_data(newAvailableLocation, newAvailableHead.encode())
-            self.__write_data(newAvailableLocation + HeadBlock.getStorageSize() + remainingSize, 
-                              EndBlock(remainingSize, BlockType.AVAILABLE).encode())
-            self.__adjustAvaliableLinks(prevAvailable, nextAvailable, newAvailableLocation)
-            return requiredSize
-        
-        self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
+            totalSize = requiredSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
+
+            if dataAreaSize > totalSize: # ToDo Need to decide if we have enough left over to split available
+                # Split the available block
+                remainingSize = dataAreaSize - totalSize
+                newAvailableHead = HeadBlock.initAvailable(remainingSize, prevAvailable, nextAvailable, 0)
+                newAvailableLocation = self.__calc_next_record_id(location, requiredSize)
+                self.__write_data(newAvailableLocation, newAvailableHead.encode())
+                self.__write_data(self.__calc_end_block_location(newAvailableLocation, remainingSize),
+                                  EndBlock(remainingSize, BlockType.AVAILABLE).encode())
+                self.__adjustAvaliableLinks(prevAvailable, nextAvailable, newAvailableLocation)
+            else:
+                requiredSize = dataAreaSize
+                self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
+        else:
+            self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
+    
         return requiredSize
 
     def __write_data(self, location: int, record: bytearray) -> None:
@@ -222,8 +241,8 @@ def add_the_first_record(fileDescriptor):
     data = bytearray(b"Hello, World!")
     record_id = fileDescriptor.Add(data)
     print(f"Added record at ID: {record_id}")
-    read_data, data_size, record_size = rave._raFile__read(record_id, expectedType = BlockType.DATA_BLOCK)
-    print(f"Read data size: {data_size}, record size: {record_size}, data: {read_data}")
+    read_data = fileDescriptor.ReadData(record_id)
+    print(f"Read data: {read_data}")
 
 
 if __name__ == "__main__":
