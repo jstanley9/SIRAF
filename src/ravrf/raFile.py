@@ -48,13 +48,7 @@ class raFile(io.BytesIO):
         if data is None or len(data) == 0:
             raise ValueError("Data cannot be None or empty")
         
-        requiredSize = self.__calcRequiredLength(data, padding)
-        location, availableHeading = self.__findAvailableSpace(requiredSize)
-        recordSize = self.__updateAvailableList(location, availableHeading, requiredSize)
-        record = self.__buildRecord(BlockType.DATA_BLOCK, data, requiredSize)
-        self.__write_data(location, record)
-
-        return location
+        return self.__addRecord(data, padding, BlockType.DATA_BLOCK)
 
     def Close(self) -> None:
         if self.__file is not None:
@@ -62,6 +56,16 @@ class raFile(io.BytesIO):
             self.__file.close()
             self.__file = None
             self.__config = None
+
+    def GetMeta(self) -> bytearray:
+        if self.__config is None:
+            raise IOError("File is not open")
+        
+        metaId = self.__config.meta_address
+        if metaId == 0:
+            return bytearray(0)
+        
+        return self.__readData(metaId, BlockType.META_BLOCK)
 
     def Open(self, path: pathlib.Path = None):
         if path is not None:
@@ -77,9 +81,43 @@ class raFile(io.BytesIO):
         config = self.__file.read(RavrfConfig.getStorageSize())
         self.__config = RavrfConfig.decode(config)
 
+    def PutMeta(self, data: bytearray, padding: int = 0) -> None:
+        if self.__config is None:
+            raise IOError("File is not open")
+        if data is None:
+            raise ValueError("Data cannot be None")
+        
+        requiredSize = self.__calcRequiredLength(data, padding)
+        metaId = self.__config.meta_address
+        if metaId == 0:
+            metaId = self.__addRecord(data, padding, BlockType.META_BLOCK)
+            self.__config.meta_address = metaId
+            self.__write_data(0, self.__config.encode())
+        else:
+            headBlock = self.__readHead(metaId, expectedType = BlockType.META_BLOCK)
+            if headBlock.record_size >= requiredSize:
+                record = self.__buildRecord(BlockType.META_BLOCK, data, headBlock.record_size)
+                self.__write_data(metaId, record)
+            else:
+                newMetaId = self.__addRecord(data, padding, BlockType.META_BLOCK)
+                self.__config.meta_address = metaId
+                self.__write_data(0, self.__config.encode())
+                self.__config.meta_address = newMetaId
+                self.__write_data(0, self.__config.encode())
+                self.__deleteRecord(metaId, headBlock)
+
     def ReadData(self, recordId: int) -> bytearray:
         return self.__readData(recordId)
     
+    def __addRecord(self, data: bytearray, padding: int = 0, blockType: BlockType = BlockType.DATA_BLOCK) -> int:
+        requiredSize = self.__calcRequiredLength(data, padding)
+        location, availableHeading = self.__findAvailableSpace(requiredSize)
+        recordSize = self.__updateAvailableList(location, availableHeading, requiredSize)
+        record = self.__buildRecord(BlockType.META_BLOCK, data, requiredSize)
+        self.__write_data(location, record)
+
+        return location
+
     def __adjustAvaliableLinks(self, prevAvailable: int, nextAvailable: int, availableLocation: int):
         if nextAvailable > 0:
             nextHead = self.__readHead(nextAvailable, expectedType = BlockType.AVAILABLE)
@@ -112,6 +150,45 @@ class raFile(io.BytesIO):
     def __calcRequiredLength(self, data: bytearray, padding: int) -> int:
         return len(data) + padding
 
+    def __deleteRecord(self, id: int, headBlock: HeadBlock) -> None:
+        if self.__config is None:
+            raise IOError("File is not open")        
+
+        availableId = id
+        prevAvailable = 0
+        nextAvailable = 0
+
+        recordSize = headBlock.record_size
+        availableSize = recordSize
+        if id > RavrfConfig.getStorageSize():
+            prevEndBlock = self.__readEndBlock(id - EndBlock.getStorageSize())
+            if prevEndBlock.block_type == BlockType.AVAILABLE:
+                prevTotalSize = self.__calc_record_size(prevEndBlock.record_size)
+                availableId = id - prevTotalSize
+                availableSize += prevTotalSize
+                prevAvailableHead = self.__readHead(availableId, expectedType = BlockType.AVAILABLE)
+                prevAvailable = prevAvailableHead.prev_available
+                nextAvailable = prevAvailableHead.next_available    
+
+        prevAvailableSecond = 0
+        nextAvailableSecond = 0
+        nextId = self.__calc_next_record_id(id, recordSize)
+        nextBlock = self.__read(nextId, headBlock.getStorageSize())
+        nextHead = HeadBlock.decode(nextBlock)
+        if nextHead.block_type == BlockType.AVAILABLE:
+            availableSize += self.__calc_record_size(nextHead.record_size)
+            if prevAvailable == 0:
+                prevAvailable = nextHead.prev_available
+            else:
+                prevAvailableSecond = nextHead.prev_available
+            if nextAvailable == 0:
+                nextAvailable = nextHead.next_available
+            else:
+                nextAvailableSecond = nextHead.next_available
+
+        availableHead = HeadBlock.initAvailable(availableSize, prevAvailable, nextAvailable, 0)
+        xx
+        
     def __findAvailableSpace(self, requiredSize: int) -> tuple[int, HeadBlock]:
         if self.__file is None:
             raise IOError("File is not open")
@@ -151,8 +228,8 @@ class raFile(io.BytesIO):
         self.__file.readinto(record)
         return record
     
-    def __readData(self, recordId: int) -> bytearray:
-        headBlock = self.__readHead(recordId, expectedType = BlockType.DATA_BLOCK)
+    def __readData(self, recordId: int, blockType: BlockType = BlockType.DATA_BLOCK) -> bytearray:
+        headBlock = self.__readHead(recordId, expectedType = blockType)
         dataSize = headBlock.data_size
         dataStart = recordId + HeadBlock.getStorageSize()
         data = self.__read(dataStart, dataSize)
