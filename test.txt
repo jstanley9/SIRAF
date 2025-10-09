@@ -1,0 +1,11 @@
+RAVRF Lint Report for test.ravrf
+File Size: 73 bytes
+
+Configuration: RavrfConfig(version=1, meta_address=0, first_available_address=0)
+
+40: Data Block record size 13, data size 13, open size 0
+    Data start location: 55
+    Hello, World!
+68: Block type = 68, record size 13
+
+*/ End of file reached at location 73

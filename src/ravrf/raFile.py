@@ -122,7 +122,7 @@ class raFile(io.BytesIO):
         requiredSize = self.__calcRequiredLength(data, padding)
         location, availableHeading = self.__findAvailableSpace(requiredSize)
         recordSize = self.__updateAvailableList(location, availableHeading, requiredSize)
-        record = self.__buildRecord(BlockType.META_BLOCK, data, requiredSize)
+        record = self.__buildRecord(blockType, data, requiredSize)
         self.__write_data(location, record)
 
         return location
