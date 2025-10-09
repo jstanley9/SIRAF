@@ -1,11 +1,21 @@
 RAVRF Lint Report for test.ravrf
-File Size: 73 bytes
+File Size: 302 bytes
 
-Configuration: RavrfConfig(version=1, meta_address=0, first_available_address=0)
+Configuration: RavrfConfig(version=1, meta_address=73, first_available_address=0)
 
 40: Data Block record size 13, data size 13, open size 0
     Data start location: 55
     Hello, World!
 68: Block type = 68, record size 13
 
-*/ End of file reached at location 73
+73: Meta Block record size 209, data size 190, open size 19
+    Data start location: 88
+    Schema {
+"fields": ["last_name", "first_name", "middle_initial", "nick_name", "birth_date", "descrip
+    tor"]
+"key": ["last_name", "first_name"]
+"config": {"case_sensitive": false, "pad": 10,}
+}
+297: Block type = 77, record size 209
+
+*/ End of file reached at location 302

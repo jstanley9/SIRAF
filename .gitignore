@@ -34,6 +34,7 @@ MANIFEST
 
 # Project stuff
 *.ravrf
+*.txt
 
 # Installer logs
 pip-log.txt

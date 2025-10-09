@@ -96,6 +96,7 @@ class raFile(io.BytesIO):
         if data is None:
             raise ValueError("Data cannot be None")
         
+        padding = int(padding)
         requiredSize = self.__calcRequiredLength(data, padding)
         metaId = self.__config.meta_address
         if metaId == 0:
@@ -381,17 +382,38 @@ def main():
         os.remove(test_file)
     rave = raFile.Create(test_file)
     try:
-        add_the_first_record(rave)
+        listOfIds = []
+        listOfIds.append(add_the_first_record(rave))
         print(f"ra file: {rave}")
+        setupMeta(rave)
     finally:
         rave.Close()
 
-def add_the_first_record(fileDescriptor):
+def add_the_first_record(fileDescriptor) -> int:
     data = bytearray(b"Hello, World!")
     record_id = fileDescriptor.Add(data)
     print(f"Added record at ID: {record_id}")
     read_data = fileDescriptor.ReadData(record_id)
     print(f"Read data: {read_data}")
+    return record_id
+
+def setupMeta(fileDescriptor) -> None:
+    schema = getSchema()
+    lenSchema = len(schema)
+    fileDescriptor.PutMeta(bytearray(schema, "utf-8"), lenSchema / 10)
+    retrievedSchema = fileDescriptor.GetMeta().decode("utf-8")
+    if schema != retrievedSchema[:lenSchema]:
+        print("ERROR: Retrieved schema does not match stored schema")
+        print(f"Stored:    {schema}")
+        print(f"Retrieved: {retrievedSchema}")
+
+def getSchema() -> str:    
+    return """Schema {
+"fields": ["last_name", "first_name", "middle_initial", "nick_name", "birth_date", "descriptor"]
+"key": ["last_name", "first_name"]
+"config": {"case_sensitive": false, "pad": 10,}
+}"""
+
 
 
 if __name__ == "__main__":
