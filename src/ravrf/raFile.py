@@ -66,6 +66,23 @@ class raFile(io.BytesIO):
             self.__file = None
             self.__config = None
 
+    def Delete(self, recordId: int) -> None:
+        if self.__file is None:
+            raise IOError("File is not open")
+        if recordId < RavrfConfig.getStorageSize():
+            raise ValueError("Record ID is invalid")
+
+        headBlock = self.__readAnyHead(recordId)
+        if headBlock.block_type not in (BlockType.DATA_BLOCK, BlockType.META_BLOCK):
+            raise ValueError(f"Record ID {recordId} is not a data or meta block. It is {headBlock.block_type}")
+        
+        self.__deleteRecord(recordId, headBlock)
+        if headBlock.block_type != BlockType.META_BLOCK:
+            self.__config.meta_address = 0
+            self.__write_data(0, self.__config.encode())
+
+        return
+    
     def GetMeta(self) -> bytearray:
         if self.__config is None:
             raise IOError("File is not open")
@@ -161,6 +178,14 @@ class raFile(io.BytesIO):
         return len(data) + padding
 
     def __deleteRecord(self, id: int, headBlock: HeadBlock) -> None:
+        def MakeJustThisAvailable():
+            newAvailableHead = HeadBlock.initAvailable(availableSize, 0, self.__config.first_available_address, 0)
+            self.__write_data(availableId, newAvailableHead.encode())
+            self.__write_data(self.__calc_end_block_location(availableId, availableSize),
+                              EndBlock(availableSize, BlockType.AVAILABLE).encode())
+            self.__config.first_available_address = availableId
+            self.__write_data(0, self.__config.encode()) 
+
         if self.__config is None:
             raise IOError("File is not open")        
 
@@ -218,14 +243,6 @@ class raFile(io.BytesIO):
             case _:
                 raise ValueError(f"Invalid available case: {availCase}")   
 
-        def MakeJustThisAvailable():
-            newAvailableHead = HeadBlock.initAvailable(availableSize, 0, self.__config.first_available_address, 0)
-            self.__write_data(availableId, newAvailableHead.encode())
-            self.__write_data(self.__calc_end_block_location(availableId, availableSize),
-                              EndBlock(availableSize, BlockType.AVAILABLE).encode())
-            self.__config.first_available_address = availableId
-            self.__write_data(0, self.__config.encode()) 
-
         def MakePrevAndThisAvailable():
             prevAvailableHead.record_size = availableSize
             self.__write_data(availableId, prevAvailableHead.encode())
@@ -265,24 +282,16 @@ class raFile(io.BytesIO):
             raise ValueError("Required size must be positive")
 
         location = self.__config.first_available_address
-        bestFitLocation = 0
-        bestFitSize = sys.maxsize
-        bestfitHead = None
 
         while location > 0:
             availHead = self.__readHead(location, expectedType = BlockType.AVAILABLE)
             recordSize = availHead.record_size
-            if recordSize >= requiredSize and recordSize < bestFitSize:
-                if recordSize == requiredSize:
-                    return location, availHead
-                bestFitLocation = location
-                bestFitSize = recordSize
-                bestfitHead = availHead
+            if recordSize >= requiredSize:
+                return location, availHead
+            location = availHead.next_available
 
-        if bestFitLocation == 0:
-            return self.__size, HeadBlock.initAvailable(requiredSize, 0, 0, 0)
-        else:
-            return bestFitLocation, bestfitHead
+        return self.__size, HeadBlock.initAvailable(requiredSize, 0, 0, 0)
+
 
     def __read(self, recordId: int, length: int) -> bytearray:
         if self.__file is None:
@@ -297,6 +306,11 @@ class raFile(io.BytesIO):
         self.__file.readinto(record)
         return record
     
+    def __readAnyHead(self, recordId: int) -> HeadBlock:
+        headSize = HeadBlock.getStorageSize()
+        headData = self.__read(recordId, headSize)
+        return HeadBlock.decode(headData)
+    
     def __readData(self, recordId: int, blockType: BlockType = BlockType.DATA_BLOCK) -> bytearray:
         headBlock = self.__readHead(recordId, expectedType = blockType)
         dataSize = headBlock.data_size
@@ -309,9 +323,7 @@ class raFile(io.BytesIO):
         return EndBlock.decode(endBlockData)
         
     def __readHead(self, recordId: int, expectedType: BlockType) -> HeadBlock:
-        headSize = HeadBlock.getStorageSize()
-        headData = self.__read(recordId, headSize)
-        headBlock = HeadBlock.decode(headData)
+        self.__readAnyHead(recordId)
 
         if headBlock.block_type != expectedType:
             raise ValueError(f"Expected block type {expectedType}, but found {headBlock.block_type}")
@@ -319,29 +331,30 @@ class raFile(io.BytesIO):
         return headBlock
     
     def __updateAvailableList(self, location: int, availableHeading: HeadBlock, 
-                              requiredSize: int) -> int:
+                              requiredSize: int) -> {int, int}:
         prevAvailable = availableHeading.prev_available
         nextAvailable = availableHeading.next_available
         dataAreaSize = availableHeading.record_size
-        if dataAreaSize > requiredSize:
+        if dataAreaSize >= requiredSize:
             totalSize = requiredSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
 
-            if dataAreaSize > totalSize: # ToDo Need to decide if we have enough left over to split available
+            if dataAreaSize > totalSize: 
                 # Split the available block
+                # The new record will go after this remaining available block
+                # This method reduces IOs since the prev and next locations do not change
                 remainingSize = dataAreaSize - totalSize
-                newAvailableHead = HeadBlock.initAvailable(remainingSize, prevAvailable, nextAvailable, 0)
-                newAvailableLocation = self.__calc_next_record_id(location, requiredSize)
-                self.__write_data(newAvailableLocation, newAvailableHead.encode())
-                self.__write_data(self.__calc_end_block_location(newAvailableLocation, remainingSize),
-                                  EndBlock(remainingSize, BlockType.AVAILABLE).encode())
-                self.__adjustAvaliableLinks(prevAvailable, nextAvailable, newAvailableLocation)
+                availableHeading.record_size = remainingSize
+                self.__write_data(location, availableHeading.encode())
+                endLocation = self.__calc_end_block_location(location, remainingSize)
+                self.__write_data(endLocation, EndBlock(remainingSize, BlockType.AVAILABLE).encode())
+                return requiredSize, endLocation + EndBlock.getStorageSize()
             else:
                 requiredSize = dataAreaSize
                 self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
         else:
             self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
     
-        return requiredSize
+        return requiredSize, location
 
     def __write_data(self, location: int, record: bytearray) -> None:
         if self.__file is None:

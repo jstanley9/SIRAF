@@ -95,7 +95,7 @@ def evaluateRAFile(filePath: pathlib.Path, textPath: pathlib.Path):
 
 def expandDataHeader(headBlock: HeadBlock, blockTypeName: str) -> str:
     return (f"{blockTypeName} record size {headBlock.record_size:,}, "
-            f"data size {headBlock.data_size:,}, open size {headBlock.open_size:,}")
+            f"data size {headBlock.data_size:,}, pad size {headBlock.open_size:,}")
     
 def expandAvailableHeader(headBlock: HeadBlock) -> str:
     return (f"Available Block record size {headBlock.record_size:,}, "
