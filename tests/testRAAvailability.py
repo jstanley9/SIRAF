@@ -48,12 +48,19 @@ def main():
     textPath = ISAM.getTextPath(filePath)    
     ISAM.evaluateRAFile(filePath, textPath)
 
-    index = random.randint(0, len(recordList))
+    index = 3
     deletedFirst = recordList[index]
     deleteARecord(filePath, deletedFirst)
     baseName = textPath.stem
-    newTextPath = textPath.with_name(f"{baseName}_del{textPath.suffix}")
+    newTextPath = textPath.with_name(f"{baseName}_del3{textPath.suffix}")
     ISAM.evaluateRAFile(filePath, newTextPath)
+
+    deletedLast = recordList[-1]
+    deleteARecord(filePath, deletedLast)
+    newTextPath = textPath.with_name(f"{baseName}_delLast{textPath.suffix}")
+    ISAM.evaluateRAFile(filePath, newTextPath)
+
+
 
 if __name__ == "__main__":
     main()
