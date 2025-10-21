@@ -139,8 +139,8 @@ class raFile(io.BytesIO):
     def __addRecord(self, data: bytearray, padding: int = 0, blockType: BlockType = BlockType.DATA_BLOCK) -> int:
         requiredSize = self.__calcRequiredLength(data, padding)
         location, availableHeading = self.__findAvailableSpace(requiredSize)
-        recordSize = self.__updateAvailableList(location, availableHeading, requiredSize)
-        record = self.__buildRecord(blockType, data, requiredSize)
+        recordSize, location = self.__updateAvailableList(location, availableHeading, requiredSize)
+        record = self.__buildRecord(blockType, data, recordSize)
         self.__write_data(location, record)
 
         return location
@@ -150,6 +150,9 @@ class raFile(io.BytesIO):
             nextHead = self.__readHead(nextAvailable, expectedType = BlockType.AVAILABLE)
             nextHead.prev_available = availableLocation if availableLocation > 0 else prevAvailable
             self.__write_data(nextAvailable, nextHead.encode())
+            if nextHead.prev_available == 0:
+                self.__config.first_available_address = nextAvailable
+                self.__write_data(0, self.__config.encode())
 
         if prevAvailable > 0:
             prevHead = self.__readHead(prevAvailable, expectedType = BlockType.AVAILABLE)
