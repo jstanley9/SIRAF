@@ -64,9 +64,10 @@ def deleteSpecificRecords(filePath: pathlib.Path, recordList: list, indexes: tup
     rave = raFile.raFile(filePath)
     rave.Open()
     for index in indexes:
-        deletedId = recordList[index]
-        print(f"Deleting record {deletedId} at index {index}")
-        rave.Delete(deletedId)
+        if index != 2:
+            deletedId = recordList[index]
+            print(f"Deleting record {deletedId} at index {index}")
+            rave.Delete(deletedId)
     rave.Close()
 
 def main():
@@ -95,8 +96,11 @@ def main():
     recordList = addSomeRecords(filePath, recordList)
     printResults(filePath, textPath, baseName, "Added some records", "AddSome")
     
-    deleteSpecificRecords(filePath, recordList, (5, 7, 6))
-    printResults(filePath, textPath, baseName, "Deleted records 5, 7, and 6  in that order", "del5_6_7")
+    deleteSpecificRecords(filePath, recordList, (5, 7))
+    printResults(filePath, textPath, baseName, "Deleted records 5, and 7 in that order", "del5_7")
+
+    deleteSpecificRecords(filePath, recordList, (6, 2))
+    printResults(filePath, textPath, baseName, "Deleted record 6, and 2  in that order", "del6")
 
 
 if __name__ == "__main__":

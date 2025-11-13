@@ -18,9 +18,9 @@ class raFile(io.BytesIO):
         CASE1_PREV_ONLY = 49        ## Previous block is also available, extend it to include this one
         CASE2_NEXT_ONLY = 50        ## Next block is available, extend this block to include Next available
         CASE3_BOTH = 51             ## Both previous and next are available, merge all three into one available
-                                    ## Neither prev or next point to each other
-        CASE4_PREV_TO_NEXT = 52     ## Both available and Previous links to Next as Next
-        CASE5_NEXT_TO_PREV = 53     ## Both available and Next links to Previous as Next
+        #                             ## Neither prev or next point to each other
+        # CASE4_PREV_TO_NEXT = 52     ## Both available and Previous links to Next as Next
+        # CASE5_NEXT_TO_PREV = 53     ## Both available and Next links to Previous as Next
 
     def __init__(self, path: pathlib.Path = None):
         self.__config: RavrfConfig = None
@@ -158,6 +158,9 @@ class raFile(io.BytesIO):
             prevHead = self.__readHead(prevAvailable, expectedType = BlockType.AVAILABLE)
             prevHead.next_available = availableLocation if availableLocation > 0 else nextAvailable
             self.__write_data(prevAvailable, prevHead.encode())
+        elif prevAvailable == 0:
+            self.__config.first_available_address = availableLocation if availableLocation > 0 else nextAvailable
+            self.__write_data(0, self.__config.encode())
 
     def __buildRecord(self, blockType: BlockType, data: bytearray, requiredSize: int) -> bytearray:
         dataLength = len(data)
@@ -213,15 +216,15 @@ class raFile(io.BytesIO):
             self.__adjustAvaliableLinks(nextHead.prev_available, nextHead.next_available, 0)
             MakePrevAndThisAvailable()
 
-        def MakePrevToNextAvailable():
-            prevAvailableHead.next_available = nextAvailableSecond
-            self.__adjustAvaliableLinks(0, nextAvailableSecond, availableId)
-            MakePrevAndThisAvailable()
+        # def MakePrevToNextAvailable():
+        #     prevAvailableHead.next_available = nextAvailableSecond
+        #     self.__adjustAvaliableLinks(0, nextAvailableSecond, availableId)
+        #     MakePrevAndThisAvailable()
 
-        def MakeNextToPrevAvailable():
-            prevAvailableHead.prev_available = prevAvailableSecond
-            self.__adjustAvaliableLinks(prevAvailableSecond, 0, availableId)
-            MakePrevAndThisAvailable()
+        # def MakeNextToPrevAvailable():
+        #     prevAvailableHead.prev_available = prevAvailableSecond
+        #     self.__adjustAvaliableLinks(prevAvailableSecond, 0, availableId)
+        #     MakePrevAndThisAvailable()
 
         if self.__config is None:
             raise IOError("File is not open")        
@@ -256,10 +259,10 @@ class raFile(io.BytesIO):
                     availCase = self.__AvailCase.CASE3_BOTH
                     prevAvailableSecond = nextHead.prev_available
                     nextAvailableSecond = nextHead.next_available
-                    if nextAvailable == nextBlock:
-                        availCase = self.__AvailCase.CASE4_PREV_TO_NEXT
-                    elif nextAvailableSecond == availableId:
-                        availCase = self.__AvailCase.CASE5_NEXT_TO_PREV
+                    # if nextAvailable == nextId:
+                    #     availCase = self.__AvailCase.CASE4_PREV_TO_NEXT
+                    # elif nextAvailableSecond == availableId:
+                    #     availCase = self.__AvailCase.CASE5_NEXT_TO_PREV
                 elif availCase == self.__AvailCase.CASE0_NO_PREV_NEXT:
                     availCase = self.__AvailCase.CASE2_NEXT_ONLY
                     prevAvailable = nextHead.prev_available
@@ -274,10 +277,10 @@ class raFile(io.BytesIO):
                 MakeThisAndNextAvailable()
             case self.__AvailCase.CASE3_BOTH:           # Both previous and next are available
                 MakePrevThisAndNextAvailable()
-            case self.__AvailCase.CASE4_PREV_TO_NEXT:   # Both available and Previous links to Next as Next
-                MakePrevToNextAvailable()
-            case self.__AvailCase.CASE5_NEXT_TO_PREV:   # Both available and Next links to Previous as Previous
-                MakeNextToPrevAvailable()
+            # case self.__AvailCase.CASE4_PREV_TO_NEXT:   # Both available and Previous links to Next as Next
+            #     MakePrevToNextAvailable()
+            # case self.__AvailCase.CASE5_NEXT_TO_PREV:   # Both available and Next links to Previous as Previous
+            #     MakeNextToPrevAvailable()
             case _:
                 raise ValueError(f"Invalid available case: {availCase}")   
 
