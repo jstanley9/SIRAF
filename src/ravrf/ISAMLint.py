@@ -28,6 +28,7 @@ def evaluateRAFile(filePath: pathlib.Path, textPath: pathlib.Path):
         config = inputFile.read(readSize)
         configuration = RavrfConfig.decode(config)
         textFile.write(f"Configuration: {configuration}\n\n")
+        validBlockTypes = [BlockType.DATA_BLOCK.value, BlockType.META_BLOCK.value, BlockType.AVAILABLE.value]
 
         headBlockSize = HeadBlock.getStorageSize()
         endBlockSize = EndBlock.getStorageSize()
@@ -42,7 +43,7 @@ def evaluateRAFile(filePath: pathlib.Path, textPath: pathlib.Path):
                 textFile.write(f"ERROR: Incomplete block descriptor at location {location:,}\n")
                 textFile.write(f"    Expected {readSize}, got {len(descriptorBytes)} [{descriptorBytes}]\n")
                 break
-            if BlockType(descriptorBytes[0]) not in (BlockType.DATA_BLOCK, BlockType.META_BLOCK, BlockType.AVAILABLE):
+            if descriptorBytes[0] not in validBlockTypes:
                 textFile.write(f"ERROR: Invalid block type {descriptorBytes[0]} at location {location:,}  [{descriptorBytes}]\n")
                 break
             

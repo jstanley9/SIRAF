@@ -13,15 +13,6 @@ class raFile(io.BytesIO):
     __DOT = "."
     __SUFFIX = ".ravrf"
     
-    class __AvailCase(IntEnum):     ## limited to 1 byte (0 - 128) value is an ascii letter
-        CASE0_NO_PREV_NEXT = 48     ## Just the data area becomes available
-        CASE1_PREV_ONLY = 49        ## Previous block is also available, extend it to include this one
-        CASE2_NEXT_ONLY = 50        ## Next block is available, extend this block to include Next available
-        CASE3_BOTH = 51             ## Both previous and next are available, merge all three into one available
-        #                             ## Neither prev or next point to each other
-        # CASE4_PREV_TO_NEXT = 52     ## Both available and Previous links to Next as Next
-        # CASE5_NEXT_TO_PREV = 53     ## Both available and Next links to Previous as Next
-
     def __init__(self, path: pathlib.Path = None):
         self.__config: RavrfConfig = None
         self.__file: io.BufferedRandom = None
@@ -184,105 +175,48 @@ class raFile(io.BytesIO):
         return len(data) + padding
 
     def __deleteRecord(self, id: int, headBlock: HeadBlock) -> None:
-        def MakeJustThisAvailable():
-            newAvailableHead = HeadBlock.initAvailable(availableSize, 0, self.__config.first_available_address, 0)
-            self.__write_data(availableId, newAvailableHead.encode())
-            self.__write_data(self.__calc_end_block_location(availableId, availableSize),
-                              EndBlock(availableSize, BlockType.AVAILABLE).encode())
-            if self.__config.first_available_address > 0:
-                self.__setPrevAvailable(self.__config.first_available_address, availableId)
-            self.__config.first_available_address = availableId
-            self.__write_data(0, self.__config.encode()) 
-
-        def MakePrevAndThisAvailable():
-            prevAvailableHead.record_size = availableSize
-            self.__write_data(availableId, prevAvailableHead.encode())
-            self.__write_data(self.__calc_end_block_location(availableId, availableSize),
-                              EndBlock(availableSize, BlockType.AVAILABLE).encode())
-            
-        def MakeThisAndNextAvailable():
-            newAvailableHead = HeadBlock.initAvailable(availableSize, nextHead.prev_available, 
-                                                       nextHead.next_available, 0)
-            self.__write_data(availableId, newAvailableHead.encode())
-            self.__write_data(self.__calc_end_block_location(availableId, availableSize),
-                              EndBlock(availableSize, BlockType.AVAILABLE).encode())
-            self.__adjustAvaliableLinks(newAvailableHead.prev_available, newAvailableHead.next_available, availableId)
-            if newAvailableHead.prev_available == 0:
-                self.__config.first_available_address = availableId
-                self.__write_data(0, self.__config.encode())
-            
-        def MakePrevThisAndNextAvailable():
-            ## Take the next available out of the list
-            self.__adjustAvaliableLinks(nextHead.prev_available, nextHead.next_available, 0)
-            MakePrevAndThisAvailable()
-
-        # def MakePrevToNextAvailable():
-        #     prevAvailableHead.next_available = nextAvailableSecond
-        #     self.__adjustAvaliableLinks(0, nextAvailableSecond, availableId)
-        #     MakePrevAndThisAvailable()
-
-        # def MakeNextToPrevAvailable():
-        #     prevAvailableHead.prev_available = prevAvailableSecond
-        #     self.__adjustAvaliableLinks(prevAvailableSecond, 0, availableId)
-        #     MakePrevAndThisAvailable()
 
         if self.__config is None:
             raise IOError("File is not open")        
 
-        availableId = id
-        prevAvailable = 0
-        nextAvailable = 0
-        availCase = self.__AvailCase.CASE0_NO_PREV_NEXT
-
+        headBlock.block_type = BlockType.AVAILABLE
         recordSize = headBlock.record_size
-        availableSize = recordSize
-        if id > RavrfConfig.getStorageSize():
-            prevEndBlock = self.__readEndBlock(id - EndBlock.getStorageSize())
-            if prevEndBlock.block_type == BlockType.AVAILABLE:
-                availCase = self.__AvailCase.CASE1_PREV_ONLY
-                prevTotalSize = self.__calc_record_size(prevEndBlock.record_size)
-                availableId = id - prevTotalSize
-                availableSize += prevTotalSize
-                prevAvailableHead = self.__readHead(availableId, expectedType = BlockType.AVAILABLE)
-                prevAvailable = prevAvailableHead.prev_available
-                nextAvailable = prevAvailableHead.next_available    
 
-        prevAvailableSecond = 0
-        nextAvailableSecond = 0
         nextId = self.__calc_next_record_id(id, recordSize)
         if nextId < self.__size:
-            nextBlock = self.__read(nextId, headBlock.getStorageSize())
-            nextHead = HeadBlock.decode(nextBlock)
+            nextHead = self.__readAnyHead(nextId)
             if nextHead.block_type == BlockType.AVAILABLE:
-                availableSize += self.__calc_record_size(nextHead.record_size)
-                if availCase == self.__AvailCase.CASE1_PREV_ONLY:
-                    availCase = self.__AvailCase.CASE3_BOTH
-                    prevAvailableSecond = nextHead.prev_available
-                    nextAvailableSecond = nextHead.next_available
-                    # if nextAvailable == nextId:
-                    #     availCase = self.__AvailCase.CASE4_PREV_TO_NEXT
-                    # elif nextAvailableSecond == availableId:
-                    #     availCase = self.__AvailCase.CASE5_NEXT_TO_PREV
-                elif availCase == self.__AvailCase.CASE0_NO_PREV_NEXT:
-                    availCase = self.__AvailCase.CASE2_NEXT_ONLY
-                    prevAvailable = nextHead.prev_available
-                    nextAvailable = nextHead.next_available
+                # Merge with next available
+                recordSize += self.__calc_record_size(nextHead.record_size)
+                headBlock.record_size = recordSize
+                self.__adjustAvaliableLinks(nextHead.prev_available, nextHead.next_available, 0)
 
-        match availCase:
-            case self.__AvailCase.CASE0_NO_PREV_NEXT:   # Just the data area becomes available
-                MakeJustThisAvailable()                                
-            case self.__AvailCase.CASE1_PREV_ONLY:      # Prev block is also available
-                MakePrevAndThisAvailable()
-            case self.__AvailCase.CASE2_NEXT_ONLY:      # Next block is available
-                MakeThisAndNextAvailable()
-            case self.__AvailCase.CASE3_BOTH:           # Both previous and next are available
-                MakePrevThisAndNextAvailable()
-            # case self.__AvailCase.CASE4_PREV_TO_NEXT:   # Both available and Previous links to Next as Next
-            #     MakePrevToNextAvailable()
-            # case self.__AvailCase.CASE5_NEXT_TO_PREV:   # Both available and Next links to Previous as Previous
-            #     MakeNextToPrevAvailable()
-            case _:
-                raise ValueError(f"Invalid available case: {availCase}")   
+        prevEndId = id - EndBlock.getStorageSize()
+        if prevEndId >= RavrfConfig.getStorageSize():
+            prevEndBlock = self.__readEndBlock(prevEndId)
+            if prevEndBlock.block_type == BlockType.AVAILABLE:
+                prevTotalSize = self.__calc_record_size(prevEndBlock.record_size)
+                availableId = id - prevTotalSize
+                prevAvailableHead = self.__readHead(availableId, expectedType = BlockType.AVAILABLE)
+                prevAvailableHead.record_size += recordSize
+                availableSize = prevAvailableHead.record_size
+                self.__write_data(availableId, prevAvailableHead.encode())
+                self.__write_data(self.__calc_end_block_location(availableId, availableSize), 
+                                    EndBlock(availableSize, BlockType.AVAILABLE).encode())
+                return
+        
+        headBlock.prev_available = 0
+        headBlock.next_available = self.__config.first_available_address
+        availableSize = headBlock.record_size
+        self.__write_data(id, headBlock.encode())
+        self.__write_data(self.__calc_end_block_location(id, availableSize), 
+                                                            EndBlock(availableSize, BlockType.AVAILABLE).encode())
+        self.__config.first_available_address = id
+        nextAvailId = headBlock.next_available
+        nextHead = self.__readHead(nextAvailId, BlockType.AVAILABLE)
+        nextHead.prev_available = id
+        self.__write_data(nextAvailId, nextHead.encode())
+
 
     def __findAvailableSpace(self, requiredSize: int) -> tuple[int, HeadBlock]:
         if self.__file is None:
@@ -308,7 +242,6 @@ class raFile(io.BytesIO):
                                          ## So we will be expanding the file size
         
         return self.__size, HeadBlock.initAvailable(requiredSize, 0, 0, 0)
-
 
     def __read(self, recordId: int, length: int) -> bytearray:
         if self.__file is None:

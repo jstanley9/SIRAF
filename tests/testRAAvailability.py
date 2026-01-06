@@ -21,7 +21,7 @@ def printResults(filePath: pathlib.Path, textPath: pathlib.Path, baseName: str,
     newTextPath = textPath.with_name(f"{baseName}_{suffix}{textPath.suffix}")
     ISAM.evaluateRAFile(filePath, newTextPath)
 
-def createInitialRcords(filePath: pathlib.Path) -> list:
+def createInitialRecords(filePath: pathlib.Path) -> list:
     recordList = []
     if os.path.exists(filePath):
         os.remove(filePath)
@@ -74,7 +74,7 @@ def main():
     filePath = ISAM.getFilePath()
 
     recordList = []
-    recordList = createInitialRcords(filePath)
+    recordList = createInitialRecords(filePath)
     print(f"list [{recordList}]")
 
     textPath = ISAM.getTextPath(filePath)    
@@ -90,8 +90,9 @@ def main():
     printResults(filePath, textPath, baseName, "Deleted 3 and last record", "del3Last")
 
     deleteARecord(filePath, recordList[0])
+    printResults(filePath, textPath, baseName, "Deleted record 0", "delZero")
     deleteARecord(filePath, recordList[4])
-    printResults(filePath, textPath, baseName, "Deleted records 0 and 4", "del0And4")
+    printResults(filePath, textPath, baseName, "Deleted record 4", "del4")
 
     recordList = addSomeRecords(filePath, recordList)
     printResults(filePath, textPath, baseName, "Added some records", "AddSome")
