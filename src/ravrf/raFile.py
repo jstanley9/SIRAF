@@ -198,7 +198,7 @@ class raFile(io.BytesIO):
                 prevTotalSize = self.__calc_record_size(prevEndBlock.record_size)
                 availableId = id - prevTotalSize
                 prevAvailableHead = self.__readHead(availableId, expectedType = BlockType.AVAILABLE)
-                prevAvailableHead.record_size += recordSize
+                prevAvailableHead.record_size += recordSize + headBlock.getStorageSize() + EndBlock.getStorageSize()
                 availableSize = prevAvailableHead.record_size
                 self.__write_data(availableId, prevAvailableHead.encode())
                 self.__write_data(self.__calc_end_block_location(availableId, availableSize), 
@@ -213,10 +213,9 @@ class raFile(io.BytesIO):
                                                             EndBlock(availableSize, BlockType.AVAILABLE).encode())
         self.__config.first_available_address = id
         nextAvailId = headBlock.next_available
-        nextHead = self.__readHead(nextAvailId, BlockType.AVAILABLE)
-        nextHead.prev_available = id
-        self.__write_data(nextAvailId, nextHead.encode())
-
+        if nextAvailId > 0:
+            self.__setPrevAvailable(nextAvailId, id)
+        self.__write_data(0, self.__config.encode())
 
     def __findAvailableSpace(self, requiredSize: int) -> tuple[int, HeadBlock]:
         if self.__file is None:
