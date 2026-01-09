@@ -42,13 +42,15 @@ class raFile(io.BytesIO):
                 raise IsADirectoryError(f"Path '{self.__path}' is not a file")
             self.__size = self.__path.stat().st_size
 
-    def Add(self, data: bytearray, padding: int = 0) -> int:
+    def Add(self, data: bytes, padding: int = 0) -> int:
         if self.__file is None:
             raise IOError("File is not open")
         if data is None or len(data) == 0:
             raise ValueError("Data cannot be None or empty")
+        if isinstance(data, bytes):
+            return self.__addRecord(data, padding, BlockType.DATA_BLOCK)
         
-        return self.__addRecord(data, padding, BlockType.DATA_BLOCK)
+        return self.__addRecord(bytes(data), padding, BlockType.DATA_BLOCK)
 
     def Close(self) -> None:
         if self.__file is not None:
@@ -74,13 +76,13 @@ class raFile(io.BytesIO):
 
         return
     
-    def GetMeta(self) -> bytearray:
+    def GetMeta(self) -> bytes:
         if self.__config is None:
             raise IOError("File is not open")
         
         metaId = self.__config.meta_address
         if metaId == 0:
-            return bytearray(0)
+            return bytes(0)
         
         return self.__readData(metaId, BlockType.META_BLOCK)
 
@@ -98,7 +100,7 @@ class raFile(io.BytesIO):
         config = self.__file.read(RavrfConfig.getStorageSize())
         self.__config = RavrfConfig.decode(config)
 
-    def PutMeta(self, data: bytearray, padding: int = 0) -> None:
+    def PutMeta(self, data: bytes, padding: int = 0) -> None:
         if self.__config is None:
             raise IOError("File is not open")
         if data is None:
@@ -124,10 +126,35 @@ class raFile(io.BytesIO):
                 self.__write_data(0, self.__config.encode())
                 self.__deleteRecord(metaId, headBlock)
 
-    def ReadData(self, recordId: int) -> bytearray:
-        return self.__readData(recordId)
+    def ReadData(self, recordRref: int) -> bytes:
+        return self.__readData(recordRref)
+
+    def Save(self, recordRef: int, record: str, padding: int = 0) -> int:
+        if self.__config is None:
+            raise IOError("File is not open")
+        if record is None:
+            raise ValueError("Record cannot be None")
+
+        if isinstance(record, str):
+            data = bytes(record, 'utf-8')
+        else:
+            data = bytes(record)
+
+        requiredSize = self.__calcRequiredLength(data, padding)
+        if recordRef == 0:
+            return self.Add(data, padding, BlockType.DATA_BLOCK)
+        
+        headBlock = self.__readHead(recordRef, expectedType = BlockType.DATA_BLOCK)
+        if headBlock.record_size >= requiredSize:
+            record = self.__buildRecord(BlockType.DATA_BLOCK, data, headBlock.record_size)
+            self.__write_data(recordRef, record)
+            return recordRef
+        
+        newRecordRef = self.__addRecord(data, padding, BlockType.DATA_BLOCK)
+        self.Delete(recordRef)
+        return newRecordRef
     
-    def __addRecord(self, data: bytearray, padding: int = 0, blockType: BlockType = BlockType.DATA_BLOCK) -> int:
+    def __addRecord(self, data: bytes, padding: int = 0, blockType: BlockType = BlockType.DATA_BLOCK) -> int:
         requiredSize = self.__calcRequiredLength(data, padding)
         location, availableHeading = self.__findAvailableSpace(requiredSize)
         recordSize, location = self.__updateAvailableList(location, availableHeading, requiredSize)
@@ -153,14 +180,14 @@ class raFile(io.BytesIO):
             self.__config.first_available_address = availableLocation if availableLocation > 0 else nextAvailable
             self.__write_data(0, self.__config.encode())
 
-    def __buildRecord(self, blockType: BlockType, data: bytearray, requiredSize: int) -> bytearray:
+    def __buildRecord(self, blockType: BlockType, data: bytes, requiredSize: int) -> bytes:
         dataLength = len(data)
         padding = requiredSize - dataLength
         
         headBlock = HeadBlock(blockType, requiredSize, dataLength, padding, 0)
         endBlock = EndBlock(requiredSize, blockType)
 
-        return bytearray(headBlock.encode() + data + bytearray(b"\x00" * padding) + endBlock.encode())
+        return bytes(headBlock.encode() + data + bytes(b"\x00" * padding) + endBlock.encode())
 
     def __calc_end_block_location(self, recordId: int, dataSize: int) -> int:
         return recordId + HeadBlock.getStorageSize() + dataSize
@@ -171,7 +198,7 @@ class raFile(io.BytesIO):
     def __calc_record_size(self, dataSize: int) -> int:
         return dataSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
 
-    def __calcRequiredLength(self, data: bytearray, padding: int) -> int:
+    def __calcRequiredLength(self, data: bytes, padding: int) -> int:
         return len(data) + padding
 
     def __deleteRecord(self, id: int, headBlock: HeadBlock) -> None:
@@ -242,7 +269,7 @@ class raFile(io.BytesIO):
         
         return self.__size, HeadBlock.initAvailable(requiredSize, 0, 0, 0)
 
-    def __read(self, recordId: int, length: int) -> bytearray:
+    def __read(self, recordId: int, length: int) -> bytes:
         if self.__file is None:
             raise IOError("File is not open")
         if recordId < 0:
@@ -253,14 +280,14 @@ class raFile(io.BytesIO):
         self.__file.seek(recordId, io.SEEK_SET)
         record = bytearray(length)
         self.__file.readinto(record)
-        return record
+        return bytes(record)
     
     def __readAnyHead(self, recordId: int) -> HeadBlock:
         headSize = HeadBlock.getStorageSize()
         headData = self.__read(recordId, headSize)
         return HeadBlock.decode(headData)
     
-    def __readData(self, recordId: int, blockType: BlockType = BlockType.DATA_BLOCK) -> bytearray:
+    def __readData(self, recordId: int, blockType: BlockType = BlockType.DATA_BLOCK) -> bytes:
         headBlock = self.__readHead(recordId, expectedType = blockType)
         dataSize = headBlock.data_size
         dataStart = recordId + HeadBlock.getStorageSize()
@@ -310,7 +337,7 @@ class raFile(io.BytesIO):
     
         return requiredSize, location
 
-    def __write_data(self, location: int, record: bytearray) -> None:
+    def __write_data(self, location: int, record: bytes) -> None:
         if self.__file is None:
             raise IOError("File is not open")
         if location < 0:
@@ -357,7 +384,7 @@ def main():
         rave.Close()
 
 def add_the_first_record(fileDescriptor) -> int:
-    data = bytearray(b"Hello, World!")
+    data = bytes(b"Hello, World!")
     record_id = fileDescriptor.Add(data)
     print(f"Added record at ID: {record_id}")
     read_data = fileDescriptor.ReadData(record_id)
@@ -367,7 +394,7 @@ def add_the_first_record(fileDescriptor) -> int:
 def setupMeta(fileDescriptor) -> None:
     schema = getSchema()
     lenSchema = len(schema)
-    fileDescriptor.PutMeta(bytearray(schema, "utf-8"), lenSchema / 10)
+    fileDescriptor.PutMeta(bytes(schema, "utf-8"), lenSchema / 10)
     retrievedSchema = fileDescriptor.GetMeta().decode("utf-8")
     if schema != retrievedSchema[:lenSchema]:
         print("ERROR: Retrieved schema does not match stored schema")

@@ -24,20 +24,20 @@ class RavrfConfig:
         return f"RavrfConfig(version={self.__version}, meta_address={self.meta_address}, " + \
                f"first_available_address={self.first_available_address})"
 
-    def encode(self) -> bytearray:
+    def encode(self) -> bytes:
         # Format: 9s B I I H (9 bytes string, 1 byte, 4 bytes, 4 bytes, 2 bytes)
-        return bytearray(struct.pack(self.__STRUCT_MASK, 
-                                     self.__MAGIC, self.__version, self.meta_address, self.first_available_address, 
-                                     self.__getChecksum(), self.__EXPANSION_AREA
+        return bytes(struct.pack(self.__STRUCT_MASK, 
+                                 self.__MAGIC, self.__version, self.meta_address, self.first_available_address, 
+                                 self.__getChecksum(), self.__EXPANSION_AREA
         ))
     
     def __getChecksum(self):
         return calc_16bit_checksum([self.__version, self.meta_address, self.first_available_address]) 
 
     @classmethod
-    def decode(cls, data: bytearray) -> "RavrfConfig":
+    def decode(cls, data: bytes) -> "RavrfConfig":
         if len(data) != cls.getStorageSize():
-            raise ValueError("Bytearray must be exactly 22 bytes")
+            raise ValueError("bytes must be exactly 22 bytes")
         magic, version, meta_address, first_available_address, checksum, _ = struct.unpack(cls.__STRUCT_MASK, data)
         if magic != cls.__MAGIC:
             raise ValueError("Invalid magic header")

@@ -31,7 +31,7 @@ def createInitialRecords(filePath: pathlib.Path) -> list:
     rave = raFile.raFile.Create(filePath)
     for recordId in range (1,11):
         data = genData(recordId)
-        dataBytes = bytearray(data, 'utf-8')
+        dataBytes = bytes(data, 'utf-8')
         pad = 0 if random.randint(1,5) != 4 else int(len(data) / 4)
         id = rave.Add(dataBytes, pad)
         recordList.append(id)
@@ -51,12 +51,14 @@ def deleteARecord(filePath: pathlib.Path, deletedFirst: int) -> None:
 def addSomeRecords(filePath: pathlib.Path, recordList: list) -> list:
     rave = raFile.raFile(filePath)
     rave.Open()
+    baseRecNbr = len(recordList)    
     for id in range(3):
-        data = genData(10 + id)
-        dataBytes = bytearray(data, 'utf-8')
+        newRecNbr = baseRecNbr + id
+        data = genData(newRecNbr)
+        dataBytes = bytes(data, 'utf-8')
         pad = 0 if random.randint(1,5) != 4 else int(len(data) / 4)
-        id = rave.Add(dataBytes, pad)
-        recordList.append(id)
+        newId = rave.Add(dataBytes, pad)
+        recordList.append(newId)
     rave.Close()
     return recordList
 
@@ -85,23 +87,58 @@ def main():
     index = 3
     deleted3 = recordList[index]
     deleteARecord(filePath, deleted3)
+    recordList[index] = 0
     deletedLast = recordList[-1]
     deleteARecord(filePath, deletedLast)
+    recordList[-1] = 0
     printResults(filePath, textPath, baseName, "Deleted 3 and last record", "del3Last")
 
     deleteARecord(filePath, recordList[0])
+    recordList[0] = 0
     printResults(filePath, textPath, baseName, "Deleted record 0", "delZero")
     deleteARecord(filePath, recordList[4])
+    recordList[4] = 0
     printResults(filePath, textPath, baseName, "Deleted record 4", "del4")
 
     recordList = addSomeRecords(filePath, recordList)
     printResults(filePath, textPath, baseName, "Added some records", "AddSome")
     
     deleteSpecificRecords(filePath, recordList, (5, 7))
+    recordList[5] = 0
+    recordList[7] = 0
     printResults(filePath, textPath, baseName, "Deleted records 5, and 7 in that order", "del5_7")
 
     deleteSpecificRecords(filePath, recordList, (6, 2))
+    recordList[6] = 0
+    recordList[2] = 0
     printResults(filePath, textPath, baseName, "Deleted record 6, and 2  in that order", "del6")
+
+    for index in range(len(recordList)):
+        if recordList[index] != 0:
+            print(f"reading and restoring record[{index}] = {recordList[index]}")
+            rave = raFile.raFile(filePath)
+            rave.Open()
+            record = rave.ReadData(recordList[index]).decode("utf-8")
+            shorterRecord = record[0:int(len(record) - 2)]
+            print(f"Reduce record length from {len(record)} to {len(shorterRecord)} characters")
+            newRRef = rave.Save(recordList[index], shorterRecord)
+            recordList[index] = newRRef
+            print(f"Restored record at ID: {newRRef}")
+            rave.Close()
+            printResults(filePath, textPath, baseName, "Save shorter record back", "SaveShorter")
+
+            rave.Open()
+            record = rave.ReadData(recordList[index]).decode("utf-8")
+            longerRecord = record + record
+            print(f"Double record length from {len(record)} to {len(longerRecord)} characters")
+            newRRef = rave.Save(recordList[index], longerRecord)
+            recordList[index] = newRRef
+            print(f"Restored longer record at ID: {newRRef}")
+            rave.Close()
+            printResults(filePath, textPath, baseName, "Save shorter record back", "SaveLonger")
+            break
+
+
 
 
 if __name__ == "__main__":

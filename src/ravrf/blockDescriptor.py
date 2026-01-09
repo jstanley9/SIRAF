@@ -108,15 +108,15 @@ class HeadBlock:
                                     self.__prev_or_data_size, self.__next_or_open_size])
 
 
-    def encode(self) -> bytearray:
+    def encode(self) -> bytes:
         # Format: B I I I H (1 byte, 4 bytes, 4 bytes, 4 bytes, 2 bytes)
-        return bytearray(struct.pack(self.__STRUCT_MASK,    
+        return bytes(struct.pack(self.__STRUCT_MASK,    
                                      self.block_type, self.record_size, 
                                      self.__prev_or_data_size, self.__next_or_open_size, 
                                      self.__getChecksum()))
 
     @classmethod
-    def decode(cls, data: bytearray):
+    def decode(cls, data: bytes):
         block_type = BlockType(data[0])
         _, record_size, prev_available, next_available, checksum = struct.unpack(cls.__STRUCT_MASK, data)
         return cls(block_type, record_size, prev_available, next_available, checksum)
@@ -134,11 +134,11 @@ class EndBlock:
         self.record_size = record_size
         self.block_type = block_type
 
-    def encode(self) -> bytearray:
-        return bytearray(struct.pack(self.__STRUCT_MASK, self.record_size, self.block_type.value))
+    def encode(self) -> bytes:
+        return bytes(struct.pack(self.__STRUCT_MASK, self.record_size, self.block_type.value))
 
     @classmethod
-    def decode(cls, data: bytearray):
+    def decode(cls, data: bytes):
         block_type = BlockType(data[-1])
         record_size, _ = struct.unpack(cls.__STRUCT_MASK, data)
         return cls(record_size, block_type)
