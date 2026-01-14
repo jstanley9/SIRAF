@@ -1,6 +1,6 @@
 import struct
 
-def calc_16bit_checksum(items):
+def calc_16bit_checksum(items) -> int:
     """
     Calculates a 16-bit checksum from a list of strings, integers, and byte strings.
     Integers are packed as 4-byte little-endian before summing.

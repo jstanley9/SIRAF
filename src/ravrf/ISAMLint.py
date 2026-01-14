@@ -7,14 +7,13 @@ import sys
 
 from config import RavrfConfig
 from blockDescriptor import BlockType, HeadBlock, EndBlock
-from enum import IntEnum
 
 def main():
     filePath = getFilePath()
     textPath = getTextPath(filePath)    
     evaluateRAFile(filePath, textPath)
     
-def evaluateRAFile(filePath: pathlib.Path, textPath: pathlib.Path):
+def evaluateRAFile(filePath: pathlib.Path, textPath: pathlib.Path) -> None:
     pattern = f"[^{re.escape(string.printable)}]"
     inputSize = os.path.getsize(filePath)
     with io.BufferedRandom(io.FileIO(filePath, mode = "r+b", closefd = True), buffer_size = 4096) as inputFile, \

@@ -1,11 +1,9 @@
 import io
 import os
 import pathlib
-import sys
 
 from config import RavrfConfig
 from blockDescriptor import BlockType, HeadBlock, EndBlock
-from enum import IntEnum
 
 
 class raFile(io.BytesIO):
@@ -25,7 +23,7 @@ class raFile(io.BytesIO):
     def __str__(self):
         return f"raFile(path={self.__path}, size={self.__size}, config={self.__config})"            
 
-    def setPath(self, path: pathlib.Path):
+    def setPath(self, path: pathlib.Path) -> None:
         if path.name.startswith(self.__DOT):
             raise ValueError("File name cannot start with a dot")
         
@@ -73,20 +71,18 @@ class raFile(io.BytesIO):
         if headBlock.block_type != BlockType.META_BLOCK:
             self.__config.meta_address = 0
             self.__write_data(0, self.__config.encode())
-
-        return
     
     def GetMeta(self) -> bytes:
         if self.__config is None:
             raise IOError("File is not open")
         
-        metaId = self.__config.meta_address
-        if metaId == 0:
+        metaRREF = self.__config.meta_address
+        if metaRREF == 0:
             return bytes(0)
         
-        return self.__readData(metaId, BlockType.META_BLOCK)
+        return self.__readData(metaRREF, BlockType.META_BLOCK)
 
-    def Open(self, path: pathlib.Path = None):
+    def Open(self, path: pathlib.Path = None) -> None:
         if path is not None:
             self.setPath(path)
 
@@ -108,28 +104,28 @@ class raFile(io.BytesIO):
         
         padding = int(padding)
         requiredSize = self.__calcRequiredLength(data, padding)
-        metaId = self.__config.meta_address
-        if metaId == 0:
-            metaId = self.__addRecord(data, padding, BlockType.META_BLOCK)
-            self.__config.meta_address = metaId
+        metaRREF = self.__config.meta_address
+        if metaRREF == 0:
+            metaRREF = self.__addRecord(data, padding, BlockType.META_BLOCK)
+            self.__config.meta_address = metaRREF
             self.__write_data(0, self.__config.encode())
         else:
-            headBlock = self.__readHead(metaId, expectedType = BlockType.META_BLOCK)
+            headBlock = self.__readHead(metaRREF, expectedType = BlockType.META_BLOCK)
             if headBlock.record_size >= requiredSize:
                 record = self.__buildRecord(BlockType.META_BLOCK, data, headBlock.record_size)
-                self.__write_data(metaId, record)
+                self.__write_data(metaRREF, record)
             else:
-                newMetaId = self.__addRecord(data, padding, BlockType.META_BLOCK)
-                self.__config.meta_address = metaId
+                newMetaRREF = self.__addRecord(data, padding, BlockType.META_BLOCK)
+                self.__config.meta_address = metaRREF
                 self.__write_data(0, self.__config.encode())
-                self.__config.meta_address = newMetaId
+                self.__config.meta_address = newMetaRREF
                 self.__write_data(0, self.__config.encode())
-                self.__deleteRecord(metaId, headBlock)
+                self.__deleteRecord(metaRREF, headBlock)
 
-    def ReadData(self, recordRref: int) -> bytes:
-        return self.__readData(recordRref)
+    def ReadData(self, recordRREF: int) -> bytes:
+        return self.__readData(recordRREF)
 
-    def Save(self, recordRef: int, record: str, padding: int = 0) -> int:
+    def Save(self, recordRREF: int, record: str, padding: int = 0) -> int:
         if self.__config is None:
             raise IOError("File is not open")
         if record is None:
@@ -141,43 +137,43 @@ class raFile(io.BytesIO):
             data = bytes(record)
 
         requiredSize = self.__calcRequiredLength(data, padding)
-        if recordRef == 0:
+        if recordRREF == 0:
             return self.Add(data, padding, BlockType.DATA_BLOCK)
         
-        headBlock = self.__readHead(recordRef, expectedType = BlockType.DATA_BLOCK)
+        headBlock = self.__readHead(recordRREF, expectedType = BlockType.DATA_BLOCK)
         if headBlock.record_size >= requiredSize:
             record = self.__buildRecord(BlockType.DATA_BLOCK, data, headBlock.record_size)
-            self.__write_data(recordRef, record)
-            return recordRef
+            self.__write_data(recordRREF, record)
+            return recordRREF
         
-        newRecordRef = self.__addRecord(data, padding, BlockType.DATA_BLOCK)
-        self.Delete(recordRef)
-        return newRecordRef
+        newRecordRREF = self.__addRecord(data, padding, BlockType.DATA_BLOCK)
+        self.Delete(recordRREF)
+        return newRecordRREF
     
     def __addRecord(self, data: bytes, padding: int = 0, blockType: BlockType = BlockType.DATA_BLOCK) -> int:
         requiredSize = self.__calcRequiredLength(data, padding)
-        location, availableHeading = self.__findAvailableSpace(requiredSize)
-        recordSize, location = self.__updateAvailableList(location, availableHeading, requiredSize)
+        BlockRREF, availableHeading = self.__findAvailableSpace(requiredSize)
+        recordSize, RecordRREF = self.__updateAvailableList(BlockRREF, availableHeading, requiredSize)
         record = self.__buildRecord(blockType, data, recordSize)
-        self.__write_data(location, record)
+        self.__write_data(RecordRREF, record)
 
-        return location
+        return RecordRREF
 
-    def __adjustAvaliableLinks(self, prevAvailable: int, nextAvailable: int, availableLocation: int):
-        if nextAvailable > 0:
-            nextHead = self.__readHead(nextAvailable, expectedType = BlockType.AVAILABLE)
-            nextHead.prev_available = availableLocation if availableLocation > 0 else prevAvailable
-            self.__write_data(nextAvailable, nextHead.encode())
+    def __adjustAvailableLinks(self, prevAvailableRREF: int, nextAvailableRREF: int, availableRREF: int):
+        if nextAvailableRREF > 0:
+            nextHead = self.__readHead(nextAvailableRREF, expectedType = BlockType.AVAILABLE)
+            nextHead.prev_available = availableRREF if availableRREF > 0 else prevAvailableRREF
+            self.__write_data(nextAvailableRREF, nextHead.encode())
             if nextHead.prev_available == 0:
-                self.__config.first_available_address = nextAvailable
+                self.__config.first_available_address = nextAvailableRREF
                 self.__write_data(0, self.__config.encode())
 
-        if prevAvailable > 0:
-            prevHead = self.__readHead(prevAvailable, expectedType = BlockType.AVAILABLE)
-            prevHead.next_available = availableLocation if availableLocation > 0 else nextAvailable
-            self.__write_data(prevAvailable, prevHead.encode())
-        elif prevAvailable == 0:
-            self.__config.first_available_address = availableLocation if availableLocation > 0 else nextAvailable
+        if prevAvailableRREF > 0:
+            prevHead = self.__readHead(prevAvailableRREF, expectedType = BlockType.AVAILABLE)
+            prevHead.next_available = availableRREF if availableRREF > 0 else nextAvailableRREF
+            self.__write_data(prevAvailableRREF, prevHead.encode())
+        elif prevAvailableRREF== 0:
+            self.__config.first_available_address = availableRREF if availableRREF > 0 else nextAvailableRREF
             self.__write_data(0, self.__config.encode())
 
     def __buildRecord(self, blockType: BlockType, data: bytes, requiredSize: int) -> bytes:
@@ -189,11 +185,11 @@ class raFile(io.BytesIO):
 
         return bytes(headBlock.encode() + data + bytes(b"\x00" * padding) + endBlock.encode())
 
-    def __calc_end_block_location(self, recordId: int, dataSize: int) -> int:
-        return recordId + HeadBlock.getStorageSize() + dataSize
+    def __calc_end_block_RREF(self, recordRREF: int, dataSize: int) -> int:
+        return recordRREF + HeadBlock.getStorageSize() + dataSize
       
-    def __calc_next_record_id(self, recordId: int, dataSize: int) -> int:
-        return recordId + self.__calc_record_size(dataSize)
+    def __calc_next_record_RREF(self, recordRREF: int, dataSize: int) -> int:
+        return recordRREF + self.__calc_record_size(dataSize)
     
     def __calc_record_size(self, dataSize: int) -> int:
         return dataSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
@@ -201,7 +197,7 @@ class raFile(io.BytesIO):
     def __calcRequiredLength(self, data: bytes, padding: int) -> int:
         return len(data) + padding
 
-    def __deleteRecord(self, id: int, headBlock: HeadBlock) -> None:
+    def __deleteRecord(self, recordRREF: int, headBlock: HeadBlock) -> None:
 
         if self.__config is None:
             raise IOError("File is not open")        
@@ -209,39 +205,39 @@ class raFile(io.BytesIO):
         headBlock.block_type = BlockType.AVAILABLE
         recordSize = headBlock.record_size
 
-        nextId = self.__calc_next_record_id(id, recordSize)
-        if nextId < self.__size:
-            nextHead = self.__readAnyHead(nextId)
+        nextRREF = self.__calc_next_record_RREF(recordRREF, recordSize)
+        if nextRREF < self.__size:
+            nextHead = self.__readAnyHead(nextRREF)
             if nextHead.block_type == BlockType.AVAILABLE:
                 # Merge with next available
                 recordSize += self.__calc_record_size(nextHead.record_size)
                 headBlock.record_size = recordSize
                 self.__adjustAvaliableLinks(nextHead.prev_available, nextHead.next_available, 0)
 
-        prevEndId = id - EndBlock.getStorageSize()
-        if prevEndId >= RavrfConfig.getStorageSize():
-            prevEndBlock = self.__readEndBlock(prevEndId)
+        prevEndRREF = recordRREF - EndBlock.getStorageSize()
+        if prevEndRREF >= RavrfConfig.getStorageSize():
+            prevEndBlock = self.__readEndBlock(prevEndRREF)
             if prevEndBlock.block_type == BlockType.AVAILABLE:
                 prevTotalSize = self.__calc_record_size(prevEndBlock.record_size)
-                availableId = id - prevTotalSize
-                prevAvailableHead = self.__readHead(availableId, expectedType = BlockType.AVAILABLE)
+                availableRREF = recordRREF - prevTotalSize
+                prevAvailableHead = self.__readHead(availableRREF, expectedType = BlockType.AVAILABLE)
                 prevAvailableHead.record_size += recordSize + headBlock.getStorageSize() + EndBlock.getStorageSize()
                 availableSize = prevAvailableHead.record_size
-                self.__write_data(availableId, prevAvailableHead.encode())
-                self.__write_data(self.__calc_end_block_location(availableId, availableSize), 
-                                    EndBlock(availableSize, BlockType.AVAILABLE).encode())
+                self.__write_data(availableRREF, prevAvailableHead.encode())
+                self.__write_data(self.__calc_end_block_RREF(availableRREF, availableSize), 
+                                  EndBlock(availableSize, BlockType.AVAILABLE).encode())
                 return
         
         headBlock.prev_available = 0
         headBlock.next_available = self.__config.first_available_address
         availableSize = headBlock.record_size
-        self.__write_data(id, headBlock.encode())
-        self.__write_data(self.__calc_end_block_location(id, availableSize), 
-                                                            EndBlock(availableSize, BlockType.AVAILABLE).encode())
-        self.__config.first_available_address = id
-        nextAvailId = headBlock.next_available
-        if nextAvailId > 0:
-            self.__setPrevAvailable(nextAvailId, id)
+        self.__write_data(recordRREF, headBlock.encode())
+        self.__write_data(self.__calc_end_block_RREF(recordRREF, availableSize), 
+                                                     EndBlock(availableSize, BlockType.AVAILABLE).encode())
+        self.__config.first_available_address = recordRREF
+        nextAvailRREF = headBlock.next_available
+        if nextAvailRREF > 0:
+            self.__setPrevAvailable(nextAvailRREF, id)
         self.__write_data(0, self.__config.encode())
 
     def __findAvailableSpace(self, requiredSize: int) -> tuple[int, HeadBlock]:
@@ -250,71 +246,71 @@ class raFile(io.BytesIO):
         if requiredSize <= 0:
             raise ValueError("Required size must be positive")
 
-        location = self.__config.first_available_address
-        saved_location = 0
+        availableRREF = self.__config.first_available_address
+        saved_RREF = 0
 
-        while location > 0:
-            availHead = self.__readHead(location, expectedType = BlockType.AVAILABLE)
+        while availableRREF > 0:
+            availHead = self.__readHead(availableRREF, expectedType = BlockType.AVAILABLE)
             recordSize = availHead.record_size
             if recordSize >= requiredSize:
-                return location, availHead
-            if location + self.__calc_record_size(recordSize) >= self.__size:
-                saved_location = location
-            location = availHead.next_available
+                return availableRREF, availHead
+            if availableRREF + self.__calc_record_size(recordSize) >= self.__size:
+                saved_RREF = availableRREF
+            availableRREF = availHead.next_available
 
-        if saved_location > 0:
-            self.__size = saved_location ## Adjust EOF to remove trailing available space
+        if saved_RREF > 0:
+            self.__size = saved_RREF     ## Adjust EOF to remove trailing available space
                                          ## We already know that the trailing available block is too small
                                          ## So we will be expanding the file size
         
         return self.__size, HeadBlock.initAvailable(requiredSize, 0, 0, 0)
 
-    def __read(self, recordId: int, length: int) -> bytes:
+    def __read(self, recordRREF: int, length: int) -> bytes:
         if self.__file is None:
             raise IOError("File is not open")
-        if recordId < 0:
+        if recordRREF < 0:
             raise ValueError("Record ID must be non-negative")
         if length <= 0:
             raise ValueError("Read length must be positive")
         
-        self.__file.seek(recordId, io.SEEK_SET)
+        self.__file.seek(recordRREF, io.SEEK_SET)
         record = bytearray(length)
         self.__file.readinto(record)
         return bytes(record)
     
-    def __readAnyHead(self, recordId: int) -> HeadBlock:
+    def __readAnyHead(self, recordRREF: int) -> HeadBlock:
         headSize = HeadBlock.getStorageSize()
-        headData = self.__read(recordId, headSize)
+        headData = self.__read(recordRREF, headSize)
         return HeadBlock.decode(headData)
     
-    def __readData(self, recordId: int, blockType: BlockType = BlockType.DATA_BLOCK) -> bytes:
-        headBlock = self.__readHead(recordId, expectedType = blockType)
+    def __readData(self, recordRREF: int, blockType: BlockType = BlockType.DATA_BLOCK) -> bytes:
+        headBlock = self.__readHead(recordRREF, expectedType = blockType)
         dataSize = headBlock.data_size
-        dataStart = recordId + HeadBlock.getStorageSize()
+        dataStart = recordRREF + HeadBlock.getStorageSize()
         data = self.__read(dataStart, dataSize)
         return data
 
-    def __readEndBlock(self, recordId: int) -> EndBlock:
-        endBlockData = self.__read(recordId, EndBlock.getStorageSize())
+    def __readEndBlock(self, recordRREF: int) -> EndBlock:
+        endBlockData = self.__read(recordRREF, EndBlock.getStorageSize())
         return EndBlock.decode(endBlockData)
         
-    def __readHead(self, recordId: int, expectedType: BlockType) -> HeadBlock:
-        headBlock = self.__readAnyHead(recordId)
+    def __readHead(self, recordRREF: int, expectedType: BlockType) -> HeadBlock:
+        headBlock = self.__readAnyHead(recordRREF)
 
         if headBlock.block_type != expectedType:
             raise ValueError(f"Expected block type {expectedType}, but found {headBlock.block_type}")
 
         return headBlock
     
-    def __setPrevAvailable(self, nextAvail: int, availableId: int) -> None:
-        nextHead = self.__readHead(nextAvail, expectedType = BlockType.AVAILABLE)
-        nextHead.prev_available = availableId
-        self.__write_data(nextAvail, nextHead.encode())
+    def __setPrevAvailable(self, nextAvailRREF: int, availableRREF: int) -> None:
+        nextHead = self.__readHead(nextAvailRREF, expectedType = BlockType.AVAILABLE)
+        nextHead.prev_available = availableRREF
+        self.__write_data(nextAvailRREF, nextHead.encode())
 
-    def __updateAvailableList(self, location: int, availableHeading: HeadBlock, 
+    def __updateAvailableList(self, availableRREF: int, availableHeading: HeadBlock, 
                               requiredSize: int) -> {int, int}:
-        prevAvailable = availableHeading.prev_available
-        nextAvailable = availableHeading.next_available
+        prevAvailableRREF = availableHeading.prev_available
+        nextAvailableRREF = availableHeading.next_available
         dataAreaSize = availableHeading.record_size
         if dataAreaSize >= requiredSize:
             totalSize = requiredSize + HeadBlock.getStorageSize() + EndBlock.getStorageSize()
@@ -325,30 +321,30 @@ class raFile(io.BytesIO):
                 # This method reduces IOs since the prev and next locations do not change
                 remainingSize = dataAreaSize - totalSize
                 availableHeading.record_size = remainingSize
-                self.__write_data(location, availableHeading.encode())
-                endLocation = self.__calc_end_block_location(location, remainingSize)
-                self.__write_data(endLocation, EndBlock(remainingSize, BlockType.AVAILABLE).encode())
-                return requiredSize, endLocation + EndBlock.getStorageSize()
+                self.__write_data(availableRREF, availableHeading.encode())
+                endEREF = self.__calc_end_block_RREF(availableRREF, remainingSize)
+                self.__write_data(endEREF, EndBlock(remainingSize, BlockType.AVAILABLE).encode())
+                return requiredSize, endEREF + EndBlock.getStorageSize()
             else:
                 requiredSize = dataAreaSize
-                self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
+                self.__adjustAvailableLinks(prevAvailableRREF, nextAvailableRREF, 0)
         else:
-            self.__adjustAvaliableLinks(prevAvailable, nextAvailable, 0)
+            self.__adjustAvailableLinks(prevAvailableRREF, nextAvailableRREF, 0)
     
-        return requiredSize, location
+        return requiredSize, availableRREF
 
-    def __write_data(self, location: int, record: bytes) -> None:
+    def __write_data(self, recordRREF: int, record: bytes) -> None:
         if self.__file is None:
             raise IOError("File is not open")
-        if location < 0:
+        if recordRREF < 0:
             raise ValueError("Location must be non-negative")
         if record is None or len(record) == 0:
             raise ValueError("Record cannot be None or empty")
 
-        self.__file.seek(location, io.SEEK_SET)
+        self.__file.seek(recordRREF, io.SEEK_SET)
         self.__file.write(record)
         self.__file.flush()
-        end_position = location + len(record)
+        end_position = recordRREF + len(record)
         if end_position > self.__size:
             self.__size = end_position
 
@@ -356,7 +352,7 @@ class raFile(io.BytesIO):
         self.Close()
 
     @classmethod
-    def Create(cls, path: pathlib.Path):
+    def Create(cls, path: pathlib.Path) -> "raFile":
         print(f"Enter Create: path = {path}")
         with io.open(path, "x+b") as file:
             config = RavrfConfig()
@@ -385,11 +381,11 @@ def main():
 
 def add_the_first_record(fileDescriptor) -> int:
     data = bytes(b"Hello, World!")
-    record_id = fileDescriptor.Add(data)
-    print(f"Added record at ID: {record_id}")
-    read_data = fileDescriptor.ReadData(record_id)
+    record_RREF = fileDescriptor.Add(data)
+    print(f"Added record at RREF: {record_RREF}")
+    read_data = fileDescriptor.ReadData(record_RREF)
     print(f"Read data: {read_data}")
-    return record_id
+    return record_RREF
 
 def setupMeta(fileDescriptor) -> None:
     schema = getSchema()
